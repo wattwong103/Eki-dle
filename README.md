@@ -1,11 +1,12 @@
 # 駅dle — Eki-dle
 
-A daily Japanese railway-station puzzle. Two modes:
+A daily Japanese railway-station puzzle. Three modes:
 
 - **駅 / Station** — Worldle-style. Guess today’s station in six tries. Each miss shows crow-flies distance, compass direction, prefecture (same / neighboring / far), region, and shared lines.
 - **文字 / Kana** — Wordle for 5-kana station names (緑 = right spot, 黄 = in the name, 灰 = not in the name).
+- **路線 / Line** — Guess today’s railway line. Hints: operator, region, overlapping prefectures, station-count higher/lower. On reveal, the line is plotted on the map.
 
-Puzzles refresh at **midnight Japan time**. Everyone gets the same daily station. Practice mode is unlimited.
+Puzzles refresh at **midnight Japan time**. Each mode has its own daily. Practice is unlimited, and Station practice can be scoped by region (北海道…九州) or city (札幌, 仙台, 東京, 横浜, 名古屋, 京都, 大阪, 神戸, 広島, 福岡, 那覇). The map labels those cities and traces your guess path; a strip diagram marks the nearest metro. After you finish, a dossier lists colored lines, city, opening year when known, and map/Wikipedia links.
 
 ## Play locally
 
@@ -33,8 +34,9 @@ npm run data
 That downloads CSVs (cached under `data/raw/`, gitignored) and writes `public/data/game.json`.
 
 - **Guess list:** every operating station (~9,000).
-- **Daily Station answers:** transfer stations (2+ lines) and Shinkansen stops (~1,100).
+- **Daily Station answers:** transfer stations, Shinkansen stops, plus a handful of famous terminals (~1,100+).
 - **Kana answers:** operating stations whose hiragana reading is exactly 5 characters.
+- **Line answers:** ~490 operating lines with enough stations to be guessable.
 
 ## Rules in brief
 

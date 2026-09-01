@@ -1,6 +1,6 @@
 import { COMPASS_EMOJI, type Compass8 } from "./geo";
 import { lineChip } from "./eki";
-import type { EkiState, Lang, MojiState, TileKind } from "./types";
+import type { EkiState, Lang, MojiState, RosenState, TileKind } from "./types";
 
 export const SITE = "https://wattwong103.github.io/Eki-dle/";
 
@@ -43,6 +43,23 @@ export function shareMoji(state: MojiState, lang: Lang): string {
       ? `駅dle 文字 ${state.kind === "daily" ? `#${state.puzzleNo}` : "練習"} ${state.status === "won" ? `${n}/6` : "X/6"}`
       : `Eki-dle Kana ${state.kind === "daily" ? `#${state.puzzleNo}` : "practice"} ${state.status === "won" ? `${n}/6` : "X/6"}`;
   const rows = state.rows.map((row) => row.map((k) => TILE[k]).join(""));
+  return [head, ...rows, SITE].join("\n");
+}
+
+export function shareRosen(state: RosenState, lang: Lang): string {
+  const n = state.guesses.length;
+  const head =
+    lang === "ja"
+      ? `駅dle 路線 ${state.kind === "daily" ? `#${state.puzzleNo}` : "練習"} ${state.status === "won" ? `${n}/6` : "X/6"}`
+      : `Eki-dle Line ${state.kind === "daily" ? `#${state.puzzleNo}` : "practice"} ${state.status === "won" ? `${n}/6` : "X/6"}`;
+  const rows = state.guesses.map((g) => {
+    if (g.index === state.targetIndex) return `🟩🟩🟩 🎉`;
+    const co = g.sameCompany ? "🟩" : "⬛";
+    const rg = g.sameRegion ? "🟩" : g.sharedPrefs.length ? "🟨" : "⬛";
+    const ct = g.countDelta === 0 ? "🟩" : "⬛";
+    const arrow = g.countDelta === 0 ? "=" : g.countDelta > 0 ? "↑" : "↓";
+    return `${co}${rg}${ct} ${arrow}${Math.abs(g.countDelta)}`;
+  });
   return [head, ...rows, SITE].join("\n");
 }
 

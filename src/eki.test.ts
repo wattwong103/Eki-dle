@@ -9,6 +9,8 @@ function st(partial: Partial<Station> & Pick<Station, "id" | "n" | "k" | "r" | "
     l: [0],
     co: [2],
     f: 1,
+    ct: "",
+    y: 0,
     ...partial,
   };
 }
@@ -19,6 +21,7 @@ const tokyo = st({
   k: "とうきょう",
   r: "Tokyo",
   p: 13,
+  ct: "千代田区",
   lat: 35.681391,
   lng: 139.766103,
   l: [0, 1],
@@ -30,6 +33,7 @@ const shinjuku = st({
   k: "しんじゅく",
   r: "Shinjuku",
   p: 13,
+  ct: "新宿区",
   lat: 35.690189,
   lng: 139.700399,
   l: [0, 2],
@@ -84,6 +88,7 @@ describe("evaluateEki", () => {
     expect(g.km).toBeGreaterThan(4);
     expect(g.km).toBeLessThan(15);
     expect(g.sharedLines.length).toBeGreaterThan(0);
+    expect(g.sameCity).toBe(false);
     expect(["E", "SE", "NE"]).toContain(g.compass);
   });
 
@@ -105,5 +110,10 @@ describe("Catalog.search", () => {
     expect(cat.search("tokyo")[0]?.n).toBe("東京");
     expect(cat.search("とうきょう")[0]?.n).toBe("東京");
     expect(cat.search("新宿")[0]?.n).toBe("新宿");
+  });
+
+  it("filters puzzle ids by region scope", () => {
+    expect(cat.puzzleIdsFor("kanto").length).toBeGreaterThan(0);
+    expect(cat.puzzleIdsFor("kansai")).toEqual([]);
   });
 });

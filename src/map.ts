@@ -1,5 +1,6 @@
 import type { Catalog } from "./catalog";
-import type { EkiGuess, Station } from "./types";
+import { METROS } from "./cities";
+import type { EkiGuess, Lang, Station } from "./types";
 
 export type JapanRings = number[][][][];
 
@@ -27,6 +28,7 @@ export function drawJapanMap(
   guesses: EkiGuess[],
   target: Station | null,
   reveal: boolean,
+  lang: Lang = "ja",
 ): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -63,6 +65,37 @@ export function drawJapanMap(
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  const label = getCss("--muted", "#8b93a0");
+  ctx.fillStyle = label;
+  ctx.font = "600 9px ui-sans-serif, 'IBM Plex Sans JP', sans-serif";
+  ctx.textBaseline = "bottom";
+  const labels = METROS.filter((m) => !["yokohama", "kyoto", "kobe"].includes(m.id));
+  for (const city of labels) {
+    const [x, y] = project(city.lng, city.lat, w, h);
+    ctx.beginPath();
+    ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = city.lng > 139.5 ? "left" : "right";
+    const pad = city.lng > 139.5 ? 4 : -4;
+    ctx.fillText(lang === "en" ? city.en : city.ja, x + pad, y - 2);
+  }
+
+  if (guesses.length > 1) {
+    ctx.beginPath();
+    guesses.forEach((g, i) => {
+      const s = catalog.byId.get(g.id);
+      if (!s) return;
+      const [x, y] = project(s.lng, s.lat, w, h);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = getCss("--line", "#c4a35a");
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   guesses.forEach((g, i) => {
     const s = catalog.byId.get(g.id);
     if (!s) return;
@@ -83,6 +116,27 @@ export function drawJapanMap(
     const [x, y] = project(target.lng, target.lat, w, h);
     star(ctx, x, y, 8, 4, 5);
     ctx.fillStyle = "#e8c547";
+    ctx.fill();
+  }
+}
+
+export function drawLineStations(
+  canvas: HTMLCanvasElement,
+  rings: JapanRings,
+  stations: Station[],
+  color: string,
+): void {
+  drawJapanMap(canvas, rings, { byId: new Map() } as Catalog, [], null, false);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const fill = color && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#e23d28";
+  ctx.fillStyle = fill;
+  for (const s of stations) {
+    const [x, y] = project(s.lng, s.lat, w, h);
+    ctx.beginPath();
+    ctx.arc(x, y, 2.4, 0, Math.PI * 2);
     ctx.fill();
   }
 }

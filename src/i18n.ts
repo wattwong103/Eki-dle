@@ -16,6 +16,10 @@ export function regionName(pref: number, lang: Lang): string {
   return REGION[regionOf(pref)][lang];
 }
 
+export function regionIdName(id: RegionId, lang: Lang): string {
+  return REGION[id][lang];
+}
+
 const JA = {
   tagline: "日本の駅を、6回で当てろ。",
   eki: "駅",
@@ -82,6 +86,33 @@ const JA = {
   practiceHint: "練習は何度でも。本日の答えとは別。",
   wonIn: (n: number) => `${n}回で到着`,
   lostAfter: (n: number) => `${n}回で未到達`,
+  rosen: "路線",
+  guessLinePlaceholder: "路線名（山手線、東急、新幹線…）",
+  invalidLine: "その路線は辞書にない",
+  alreadyLine: "その路線は既に入力済み",
+  moreStations: "駅が多い",
+  fewerStations: "駅が少ない",
+  sameCount: "同じ駅数",
+  sharedPrefs: "通る県が重なる",
+  noSharedPrefs: "通る県の共通なし",
+  shinkansen: "新幹線",
+  notShinkansen: "在来線",
+  stationsUnit: "駅",
+  lineUnit: "路線",
+  mapLink: "地図",
+  scope: "出題範囲",
+  scopeAll: "全国",
+  scopeKanto: "関東",
+  scopeKansai: "関西",
+  scopeSk: "新幹線",
+  scopeJr: "JR",
+  helpRosenTitle: "路線モード",
+  helpRosen:
+    "本日の鉄道路線を6回以内に当てる。毎回、事業者・地方・通過県・駅数の上下が出る。乗換駅モードとは別のデイリー。",
+  playAgainLine: "もう一路線",
+  taglineRosen: "日本の路線を、6回で当てろ。",
+  sameCity: "同じ市",
+  scopeHint: "練習の都市・地方は盤面のチップで選ぶ。",
 };
 
 const EN: typeof JA = {
@@ -150,6 +181,33 @@ const EN: typeof JA = {
   practiceHint: "Practice is unlimited and separate from today's puzzle.",
   wonIn: (n: number) => `Solved in ${n}`,
   lostAfter: (n: number) => `No luck after ${n}`,
+  rosen: "Line",
+  guessLinePlaceholder: "Line name (Yamanote, Tokyu, Shinkansen…)",
+  invalidLine: "Not in the line list",
+  alreadyLine: "Already guessed",
+  moreStations: "more stations",
+  fewerStations: "fewer stations",
+  sameCount: "same station count",
+  sharedPrefs: "shared prefectures",
+  noSharedPrefs: "no prefectures in common",
+  shinkansen: "Shinkansen",
+  notShinkansen: "Conventional",
+  stationsUnit: " stations",
+  lineUnit: " lines",
+  mapLink: "Map",
+  scope: "Puzzle pool",
+  scopeAll: "All Japan",
+  scopeKanto: "Kanto",
+  scopeKansai: "Kansai",
+  scopeSk: "Shinkansen",
+  scopeJr: "JR",
+  helpRosenTitle: "Line mode",
+  helpRosen:
+    "Guess today's railway line in six tries. Each guess shows operator, region, overlapping prefectures, and whether it has more or fewer stations. Separate daily from Station mode.",
+  playAgainLine: "Next line",
+  taglineRosen: "Guess the Japanese rail line in six.",
+  sameCity: "Same city",
+  scopeHint: "Pick a city or region from the chips in practice mode.",
 };
 
 export function t(lang: Lang): typeof JA {

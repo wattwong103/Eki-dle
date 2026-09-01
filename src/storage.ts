@@ -1,4 +1,5 @@
-import type { EkiState, MojiState, Settings, Stats } from "./types";
+import { isScope } from "./cities";
+import type { EkiState, MojiState, Mode, RosenState, Settings, Stats } from "./types";
 
 const PREFIX = "ekidle:v1:";
 
@@ -9,6 +10,7 @@ export function loadSettings(): Settings {
     lang: s.lang === "en" ? "en" : "ja",
     theme: s.theme === "day" ? "day" : "night",
     colorblind: !!s.colorblind,
+    scope: isScope(s.scope) ? s.scope : "all",
   };
 }
 
@@ -27,7 +29,7 @@ export function emptyStats(): Stats {
   };
 }
 
-export function loadStats(mode: "eki" | "moji"): Stats {
+export function loadStats(mode: Mode): Stats {
   const raw = read(`${PREFIX}stats:${mode}`);
   if (!raw) return emptyStats();
   try {
@@ -37,12 +39,12 @@ export function loadStats(mode: "eki" | "moji"): Stats {
   }
 }
 
-export function saveStats(mode: "eki" | "moji", stats: Stats): void {
+export function saveStats(mode: Mode, stats: Stats): void {
   localStorage.setItem(`${PREFIX}stats:${mode}`, JSON.stringify(stats));
 }
 
 export function recordFinish(
-  mode: "eki" | "moji",
+  mode: Mode,
   dateKey: string,
   won: boolean,
   guesses: number,
@@ -73,8 +75,8 @@ function consecutive(prev: string, next: string): boolean {
   return b - a === 86_400_000;
 }
 
-export function loadDaily<T extends EkiState | MojiState>(
-  mode: "eki" | "moji",
+export function loadDaily<T extends EkiState | MojiState | RosenState>(
+  mode: Mode,
   dateKey: string,
 ): T | null {
   const raw = read(`${PREFIX}daily:${mode}:${dateKey}`);
@@ -86,7 +88,10 @@ export function loadDaily<T extends EkiState | MojiState>(
   }
 }
 
-export function saveDaily(mode: "eki" | "moji", state: EkiState | MojiState): void {
+export function saveDaily(
+  mode: Mode,
+  state: EkiState | MojiState | RosenState,
+): void {
   if (state.kind !== "daily") return;
   localStorage.setItem(`${PREFIX}daily:${mode}:${state.dateKey}`, JSON.stringify(state));
 }

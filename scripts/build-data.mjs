@@ -334,6 +334,72 @@ function moraCount(kana) {
   return n;
 }
 
+const PREF_PREFIXES = [
+  "北海道",
+  "青森県",
+  "岩手県",
+  "宮城県",
+  "秋田県",
+  "山形県",
+  "福島県",
+  "茨城県",
+  "栃木県",
+  "群馬県",
+  "埼玉県",
+  "千葉県",
+  "東京都",
+  "神奈川県",
+  "新潟県",
+  "富山県",
+  "石川県",
+  "福井県",
+  "山梨県",
+  "長野県",
+  "岐阜県",
+  "静岡県",
+  "愛知県",
+  "三重県",
+  "滋賀県",
+  "京都府",
+  "大阪府",
+  "兵庫県",
+  "奈良県",
+  "和歌山県",
+  "鳥取県",
+  "島根県",
+  "岡山県",
+  "広島県",
+  "山口県",
+  "徳島県",
+  "香川県",
+  "愛媛県",
+  "高知県",
+  "福岡県",
+  "佐賀県",
+  "長崎県",
+  "熊本県",
+  "大分県",
+  "宮崎県",
+  "鹿児島県",
+  "沖縄県",
+];
+
+function extractCity(address) {
+  if (!address) return "";
+  let a = address;
+  for (const p of PREF_PREFIXES) {
+    if (a.startsWith(p)) {
+      a = a.slice(p.length);
+      break;
+    }
+  }
+  const city = a.match(/([一-龥々ぁ-んァ-ン]{2,8}市)/);
+  if (city) return city[1];
+  const ku = a.match(/([一-龥々]{1,6}区)/);
+  if (ku) return ku[1];
+  return "";
+}
+
 function toHiraganaChars(kana) {
   return [...kana.normalize("NFKC")]
     .map((ch) => {
@@ -413,6 +479,8 @@ async function main() {
       lat: Number(row[si.lat]),
       lng: Number(row[si.lng]),
       pref: Number(row[si.prefecture]),
+      address: row[si.address] || "",
+      open: row[si.open_date] || "",
       closed: Number(row[si.closed]) === 1,
       lineCodes: new Set(),
     });
@@ -455,6 +523,7 @@ async function main() {
     const kana = toHiraganaChars(st.kana);
     const romaji = titleCaseRomaji(kanaToRomaji(kana || st.kana));
     const puzzle = lineIdx.length >= 2 || shinkansen;
+    const year = st.open && st.open !== "NULL" ? Number(String(st.open).slice(0, 4)) : 0;
     stations.push({
       id: st.id,
       n: st.name,
@@ -462,6 +531,8 @@ async function main() {
       k: kana,
       r: romaji,
       p: st.pref,
+      ct: extractCity(st.address),
+      y: Number.isFinite(year) && year > 1800 ? year : 0,
       lat: Math.round(st.lat * 1e6) / 1e6,
       lng: Math.round(st.lng * 1e6) / 1e6,
       l: lineIdx,

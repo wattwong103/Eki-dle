@@ -21,6 +21,7 @@ export function evaluateEki(guess: Station, target: Station): EkiGuess {
     sharedLines,
     sameCompany,
     sameRegion: regionOf(guess.p) === regionOf(target.p),
+    sameCity: !!guess.ct && guess.ct === target.ct,
   };
 }
 

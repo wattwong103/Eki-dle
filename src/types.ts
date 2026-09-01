@@ -14,6 +14,8 @@ export interface Station {
   k: string;
   r: string;
   p: number;
+  ct: string;
+  y: number;
   lat: number;
   lng: number;
   l: number[];
@@ -46,14 +48,38 @@ export const FLAG_SHINKANSEN = 2;
 
 export type Lang = "ja" | "en";
 export type Theme = "night" | "day";
-export type Mode = "eki" | "moji";
+export type Mode = "eki" | "moji" | "rosen";
 export type PlayKind = "daily" | "practice";
 export type TileKind = "correct" | "present" | "absent" | "empty";
+export type Scope =
+  | "all"
+  | "hokkaido"
+  | "tohoku"
+  | "kanto"
+  | "chubu"
+  | "kansai"
+  | "chugoku"
+  | "shikoku"
+  | "kyushu"
+  | "shinkansen"
+  | "jr"
+  | "sapporo"
+  | "sendai"
+  | "tokyo"
+  | "yokohama"
+  | "nagoya"
+  | "kyoto"
+  | "osaka"
+  | "kobe"
+  | "hiroshima"
+  | "fukuoka"
+  | "naha";
 
 export interface Settings {
   lang: Lang;
   theme: Theme;
   colorblind: boolean;
+  scope: Scope;
 }
 
 export interface EkiGuess {
@@ -66,6 +92,7 @@ export interface EkiGuess {
   sharedLines: number[];
   sameCompany: boolean;
   sameRegion: boolean;
+  sameCity: boolean;
 }
 
 export interface EkiState {
@@ -86,6 +113,25 @@ export interface MojiState {
   rows: TileKind[][];
   letters: string[][];
   current: string[];
+  status: "playing" | "won" | "lost";
+}
+
+export interface RosenGuess {
+  index: number;
+  sameCompany: boolean;
+  sameRegion: boolean;
+  sharedPrefs: number[];
+  count: number;
+  countDelta: number;
+  shinkansen: boolean;
+}
+
+export interface RosenState {
+  kind: PlayKind;
+  puzzleNo: number;
+  dateKey: string;
+  targetIndex: number;
+  guesses: RosenGuess[];
   status: "playing" | "won" | "lost";
 }
 

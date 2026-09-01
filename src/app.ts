@@ -1,4 +1,6 @@
-import { Catalog } from "./catalog";
+import { Catalog, type LineInfo } from "./catalog";
+import { ALL_SCOPES, METROS, cityStripHtml, metroName } from "./cities";
+import { lineChipHtml, lineDossierHtml, stationDossierHtml } from "./dossier";
 import {
   jstDateKey,
   nextJstMidnightMs,
@@ -7,11 +9,12 @@ import {
   randomId,
 } from "./daily";
 import { formatKm } from "./geo";
-import { regionName, t } from "./i18n";
+import { regionIdName, regionName, t } from "./i18n";
 import { evaluateEki, EKI_MAX, lineChip } from "./eki";
-import { copyText, shareEki, shareMoji } from "./share";
-import { drawJapanMap, loadJapanRings } from "./map";
-import { prefName } from "./prefectures";
+import { evaluateRosen } from "./rosen";
+import { copyText, shareEki, shareMoji, shareRosen } from "./share";
+import { drawJapanMap, drawLineStations, loadJapanRings } from "./map";
+import { prefName, type RegionId } from "./prefectures";
 import {
   loadDaily,
   loadSettings,
@@ -36,6 +39,8 @@ import type {
   Mode,
   MojiState,
   PlayKind,
+  RosenState,
+  Scope,
   Settings,
   Station,
   TileKind,
@@ -86,14 +91,20 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
   let play: PlayKind = "daily";
   let eki = restoreEki();
   let moji = restoreMoji();
+  let rosen = restoreRosen();
   let query = "";
   let suggestions: Station[] = [];
+  let lineHits: LineInfo[] = [];
   let highlight = 0;
   let alertMsg = "";
   let modal: null | "help" | "stats" | "settings" = null;
   let toast = "";
   let smallOn = false;
-  let recorded = { eki: eki.status !== "playing", moji: moji.status !== "playing" };
+  let recorded = {
+    eki: eki.status !== "playing",
+    moji: moji.status !== "playing",
+    rosen: rosen.status !== "playing",
+  };
 
   applyChrome();
   root.innerHTML = shell();
@@ -127,13 +138,20 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     return freshMoji("daily");
   }
 
+  function restoreRosen(): RosenState {
+    const dateKey = jstDateKey();
+    const saved = loadDaily<RosenState>("rosen", dateKey);
+    if (saved && saved.targetIndex !== undefined && catalog.lines[saved.targetIndex]) return saved;
+    return freshRosen("daily");
+  }
+
   function freshEki(kind: PlayKind): EkiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
+    const pool = kind === "practice" ? catalog.puzzleIdsFor(settings.scope) : catalog.puzzleIds;
+    const ids = pool.length ? pool : catalog.puzzleIds;
     const targetId =
-      kind === "daily"
-        ? pickId(catalog.puzzleIds, puzzleNo, "eki")
-        : randomId(catalog.puzzleIds);
+      kind === "daily" ? pickId(ids, puzzleNo, "eki") : randomId(ids);
     return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
   }
 
@@ -145,6 +163,16 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         ? pickId(catalog.mojiIds, puzzleNo, "moji")
         : randomId(catalog.mojiIds);
     return emptyMoji({ kind, puzzleNo, dateKey, targetId, length: MOJI_LEN });
+  }
+
+  function freshRosen(kind: PlayKind): RosenState {
+    const dateKey = jstDateKey();
+    const puzzleNo = puzzleNumber(dateKey);
+    const targetIndex =
+      kind === "daily"
+        ? pickId(catalog.rosenIds, puzzleNo, "rosen")
+        : randomId(catalog.rosenIds);
+    return { kind, puzzleNo, dateKey, targetIndex, guesses: [], status: "playing" };
   }
 
   function i() {
@@ -172,6 +200,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
             <div class="tabs" role="tablist">
               <button class="tab" data-act="mode-eki" role="tab">${esc(L.eki)}</button>
               <button class="tab" data-act="mode-moji" role="tab">${esc(L.moji)}</button>
+              <button class="tab" data-act="mode-rosen" role="tab">${esc(L.rosen)}</button>
             </div>
             <div class="pills">
               <button class="pill" data-act="play-daily">${esc(L.daily)}</button>
@@ -182,6 +211,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       </header>
       <div class="wrap">
         <p class="tagline" id="tagline"></p>
+        <div class="pills scopes" id="scope-pills" hidden></div>
         <section id="eki-panel">
           <form class="search" id="guess-form" autocomplete="off">
             <input id="guess" name="guess" type="text" enterkeyhint="go" spellcheck="false" />
@@ -192,6 +222,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
           <p class="remaining" id="remaining-eki"></p>
           <div class="guess-list" id="tickets"></div>
           <div class="map-wrap"><canvas id="map"></canvas></div>
+          <div id="city-strip"></div>
         </section>
         <section id="moji-panel" hidden>
           <p class="alert" id="moji-alert"></p>
@@ -220,15 +251,17 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     guess?.addEventListener("input", () => {
       query = guess.value;
       alertMsg = "";
-      suggestions = catalog.search(query);
       highlight = 0;
+      if (mode === "rosen") lineHits = catalog.searchLines(query);
+      else suggestions = catalog.search(query);
       paintSuggest();
       paintAlert();
     });
     guess?.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        highlight = Math.min(suggestions.length - 1, highlight + 1);
+        const n = mode === "rosen" ? lineHits.length : suggestions.length;
+        highlight = Math.min(n - 1, highlight + 1);
         paintSuggest();
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
@@ -262,8 +295,21 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     if (act === "noop") return;
     if (act === "mode-eki") setMode("eki");
     else if (act === "mode-moji") setMode("moji");
+    else if (act === "mode-rosen") setMode("rosen");
     else if (act === "play-daily") setPlay("daily");
     else if (act === "play-practice") setPlay("practice");
+    else if (act?.startsWith("scope-")) {
+      const next = act.slice(6) as Scope;
+      settings.scope = next;
+      saveSettings(settings);
+      if (play === "practice" && mode === "eki") {
+        eki = freshEki("practice");
+        query = "";
+        const input = document.getElementById("guess") as HTMLInputElement | null;
+        if (input) input.value = "";
+      }
+      paint();
+    }
     else if (act === "help") openModal("help");
     else if (act === "stats") openModal("stats");
     else if (act === "settings") openModal("settings");
@@ -301,16 +347,30 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         submitEki(s);
       }
     }
+    else if (act === "pick-line") {
+      const idx = Number(btn.dataset.id);
+      const info = catalog.lines[idx];
+      if (info) {
+        query = info.line.n;
+        const input = document.getElementById("guess") as HTMLInputElement;
+        input.value = query;
+        lineHits = [];
+        paintSuggest();
+        submitRosen(info);
+      }
+    }
     else if (act === "share") void doShare();
     else if (act === "again") {
+      play = "practice";
       if (mode === "eki") {
         eki = freshEki("practice");
-        play = "practice";
         recorded.eki = false;
-      } else {
+      } else if (mode === "moji") {
         moji = freshMoji("practice");
-        play = "practice";
         recorded.moji = false;
+      } else {
+        rosen = freshRosen("practice");
+        recorded.rosen = false;
       }
       query = "";
       const input = document.getElementById("guess") as HTMLInputElement | null;
@@ -369,10 +429,10 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     if (next === "daily") {
       eki = restoreEki();
       moji = restoreMoji();
-    } else {
-      if (mode === "eki") eki = freshEki("practice");
-      else moji = freshMoji("practice");
-    }
+      rosen = restoreRosen();
+    } else if (mode === "eki") eki = freshEki("practice");
+    else if (mode === "moji") moji = freshMoji("practice");
+    else rosen = freshRosen("practice");
     query = "";
     const input = document.getElementById("guess") as HTMLInputElement | null;
     if (input) input.value = "";
@@ -385,14 +445,20 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     paintModal();
   }
 
-  function currentState(): EkiState | MojiState {
-    return mode === "eki" ? eki : moji;
+  function currentState(): EkiState | MojiState | RosenState {
+    if (mode === "eki") return eki;
+    if (mode === "moji") return moji;
+    return rosen;
   }
 
   function submitEki(picked?: Station): void {
     const L = i();
     if (eki.status !== "playing") return;
     const input = document.getElementById("guess") as HTMLInputElement;
+    if (mode === "rosen") {
+      submitRosen(lineHits[highlight]);
+      return;
+    }
     const hit =
       picked ??
       suggestions[highlight] ??
@@ -457,17 +523,61 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     paint();
   }
 
-  function finishIfNeeded(which: Mode, state: EkiState | MojiState): void {
+  function submitRosen(picked?: LineInfo): void {
+    const L = i();
+    if (rosen.status !== "playing") return;
+    const input = document.getElementById("guess") as HTMLInputElement;
+    const hit = picked ?? lineHits[highlight] ?? catalog.searchLines(input.value, 1)[0];
+    if (!hit) {
+      alertMsg = L.invalidLine;
+      paintAlert();
+      return;
+    }
+    if (rosen.guesses.some((g) => g.index === hit.index)) {
+      alertMsg = L.alreadyLine;
+      paintAlert();
+      return;
+    }
+    const target = catalog.lineInfo(rosen.targetIndex);
+    const g = evaluateRosen(hit, target);
+    rosen.guesses.push(g);
+    if (g.index === target.index) {
+      rosen.status = "won";
+      burst();
+    } else if (rosen.guesses.length >= EKI_MAX) {
+      rosen.status = "lost";
+    }
+    finishIfNeeded("rosen", rosen);
+    saveDaily("rosen", rosen);
+    query = "";
+    input.value = "";
+    lineHits = [];
+    alertMsg = "";
+    paint();
+  }
+
+  function finishIfNeeded(which: Mode, state: EkiState | MojiState | RosenState): void {
     if (state.kind !== "daily") return;
     if (state.status === "playing") return;
     if (recorded[which]) return;
     recorded[which] = true;
-    recordFinish(which, state.dateKey, state.status === "won", which === "eki" ? (state as EkiState).guesses.length : (state as MojiState).rows.length);
+    const n =
+      which === "eki"
+        ? (state as EkiState).guesses.length
+        : which === "moji"
+          ? (state as MojiState).rows.length
+          : (state as RosenState).guesses.length;
+    recordFinish(which, state.dateKey, state.status === "won", n);
   }
 
   async function doShare(): Promise<void> {
     const L = i();
-    const text = mode === "eki" ? shareEki(eki, settings.lang) : shareMoji(moji, settings.lang);
+    const text =
+      mode === "eki"
+        ? shareEki(eki, settings.lang)
+        : mode === "moji"
+          ? shareMoji(moji, settings.lang)
+          : shareRosen(rosen, settings.lang);
     const ok = await copyText(text);
     toast = ok ? L.shared : L.copiedFail;
     paintResult();
@@ -483,7 +593,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     const no = document.getElementById("puzzle-no");
     if (no) no.textContent = state.kind === "daily" ? `#${state.puzzleNo}` : L.practice;
     const tag = document.getElementById("tagline");
-    if (tag) tag.textContent = L.tagline;
+    if (tag) tag.textContent = mode === "rosen" ? L.taglineRosen : L.tagline;
     const footer = document.getElementById("footer");
     if (footer) footer.textContent = L.dataCredit;
 
@@ -492,6 +602,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       tab.setAttribute("aria-selected", String(tab.dataset.act === `mode-${mode}`));
       if (tab.dataset.act === "mode-eki") tab.textContent = L.eki;
       if (tab.dataset.act === "mode-moji") tab.textContent = L.moji;
+      if (tab.dataset.act === "mode-rosen") tab.textContent = L.rosen;
     });
     root.querySelectorAll(".pill").forEach((el) => {
       const p = el as HTMLElement;
@@ -502,13 +613,14 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
 
     const ekiPanel = document.getElementById("eki-panel");
     const mojiPanel = document.getElementById("moji-panel");
-    if (ekiPanel) ekiPanel.hidden = mode !== "eki";
+    if (ekiPanel) ekiPanel.hidden = mode === "moji";
     if (mojiPanel) mojiPanel.hidden = mode !== "moji";
 
     const guess = document.getElementById("guess") as HTMLInputElement | null;
+    const playingSearch = mode === "rosen" ? rosen.status === "playing" : eki.status === "playing";
     if (guess) {
-      guess.placeholder = L.guessPlaceholder;
-      guess.disabled = eki.status !== "playing";
+      guess.placeholder = mode === "rosen" ? L.guessLinePlaceholder : L.guessPlaceholder;
+      guess.disabled = !playingSearch;
     }
     const gbtn = document.getElementById("guess-btn");
     if (gbtn) gbtn.textContent = L.guess;
@@ -518,6 +630,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       kana.disabled = moji.status !== "playing";
     }
 
+    paintScopes();
     paintAlert();
     paintRemaining();
     paintSuggest();
@@ -527,6 +640,29 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     paintResult();
     paintModal();
     paintMap();
+    paintCityStrip();
+  }
+
+  function paintScopes(): void {
+    const box = document.getElementById("scope-pills");
+    if (!box) return;
+    const show = play === "practice" && mode === "eki";
+    box.hidden = !show;
+    if (!show) return;
+    box.innerHTML = ALL_SCOPES.map((id) => {
+      const label = scopeLabel(id);
+      return `<button class="pill" data-act="scope-${id}" aria-selected="${settings.scope === id}">${esc(label)}</button>`;
+    }).join("");
+  }
+
+  function scopeLabel(id: Scope): string {
+    const L = i();
+    if (id === "all") return L.scopeAll;
+    if (id === "shinkansen") return L.scopeSk;
+    if (id === "jr") return L.scopeJr;
+    const metro = METROS.find((m) => m.id === id);
+    if (metro) return metroName(metro, settings.lang);
+    return regionIdName(id as RegionId, settings.lang);
   }
 
   function paintAlert(): void {
@@ -536,20 +672,41 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
 
   function paintRemaining(): void {
     const L = i();
-    const used = mode === "eki" ? eki.guesses.length : moji.rows.length;
+    const used =
+      mode === "eki" ? eki.guesses.length : mode === "moji" ? moji.rows.length : rosen.guesses.length;
     const left = Math.max(0, EKI_MAX - used);
     const playing = currentState().status === "playing";
     const text = playing ? `${L.remaining} ${left} ${L.tries}` : "";
     const ekiEl = document.getElementById("remaining-eki");
     const mojiEl = document.getElementById("remaining-moji");
-    if (ekiEl) ekiEl.textContent = mode === "eki" ? text : "";
+    if (ekiEl) ekiEl.textContent = mode === "moji" ? "" : text;
     if (mojiEl) mojiEl.textContent = mode === "moji" ? text : "";
   }
 
   function paintSuggest(): void {
     const box = document.getElementById("suggest");
     if (!box) return;
-    if (!suggestions.length || currentState().status !== "playing" || mode !== "eki") {
+    const playing = currentState().status === "playing";
+    if (mode === "rosen") {
+      if (!lineHits.length || !playing) {
+        box.hidden = true;
+        box.innerHTML = "";
+        return;
+      }
+      box.hidden = false;
+      const unit = i().stationsUnit;
+      box.innerHTML = lineHits
+        .map((info, idx) => {
+          const sub = `${info.line.cn || "—"} · ${info.count}${unit}`;
+          return `<button type="button" data-act="pick-line" data-id="${info.index}" aria-selected="${idx === highlight}">
+            <span class="name">${esc(info.line.n)}</span>
+            <span class="meta">${esc(sub)}</span>
+          </button>`;
+        })
+        .join("");
+      return;
+    }
+    if (!suggestions.length || !playing || mode !== "eki") {
       box.hidden = true;
       box.innerHTML = "";
       return;
@@ -571,14 +728,50 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     const box = document.getElementById("tickets");
     if (!box) return;
     const L = i();
+    if (mode === "rosen") {
+      const target = catalog.lineInfo(rosen.targetIndex);
+      box.innerHTML = [...rosen.guesses].reverse().map((g) => {
+        const info = catalog.lineInfo(g.index);
+        const win = g.index === target.index;
+        const countLabel =
+          g.countDelta === 0
+            ? L.sameCount
+            : g.countDelta > 0
+              ? `+${g.countDelta} · ${L.moreStations}`
+              : `${g.countDelta} · ${L.fewerStations}`;
+        const prefs = g.sharedPrefs.slice(0, 3).map((p) => prefName(p, settings.lang));
+        return `<article class="ticket ${g.sameRegion ? "pref-same" : g.sharedPrefs.length ? "pref-near" : "pref-far"} ${win ? "is-win" : ""}">
+          <div class="ticket-top">
+            <div>
+              <span class="st-name">${esc(info.line.n)}</span>
+            </div>
+          </div>
+          <div class="chips">
+            <span class="chip ${g.sameCompany ? "good" : ""}">${esc(info.line.cn || "—")}</span>
+            <span class="chip ${g.sameRegion ? "good" : ""}">${esc(regionIdName(info.region, settings.lang))}</span>
+            <span class="chip">${info.count}${esc(L.stationsUnit)}</span>
+            ${
+              prefs.length
+                ? `<span class="chip close">${esc(prefs.join(" · "))}</span>`
+                : `<span class="chip">${esc(L.noSharedPrefs)}</span>`
+            }
+            ${info.line.sk ? `<span class="chip ${target.line.sk ? "good" : ""}">${esc(L.shinkansen)}</span>` : ""}
+          </div>
+          <div class="metrics">
+            <div class="km">${esc(countLabel)}</div>
+          </div>
+        </article>`;
+      }).join("");
+      return;
+    }
     const target = catalog.station(eki.targetId);
     box.innerHTML = [...eki.guesses].reverse().map((g) => {
       const s = catalog.station(g.id);
       const win = g.id === target.id;
       const lc = lineChip(g);
       const shared = g.sharedLines
-        .map((idx) => catalog.line(idx)?.n)
-        .filter(Boolean)
+        .map((idx) => catalog.line(idx))
+        .filter((x): x is NonNullable<typeof x> => !!x)
         .slice(0, 4);
       return `<article class="ticket pref-${g.pref} ${win ? "is-win" : ""}">
         <div class="ticket-top">
@@ -589,10 +782,11 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         </div>
         <div class="chips">
           <span class="chip chip-pref ${g.pref === "same" ? "good" : g.pref === "near" ? "close" : ""}">${esc(prefName(s.p, settings.lang))}</span>
+          ${s.ct ? `<span class="chip ${g.sameCity ? "good" : ""}">${esc(s.ct)}</span>` : ""}
           <span class="chip ${g.sameRegion ? "good" : ""}">${esc(regionName(s.p, settings.lang))}</span>
           ${
             shared.length
-              ? shared.map((n) => `<span class="chip good">${esc(n!)}</span>`).join("")
+              ? shared.map((ln) => lineChipHtml(ln.n, ln.col, "good")).join("")
               : `<span class="chip ${lc === "present" ? "close" : ""}">${esc(lc === "present" ? L.sameCompany : L.noSharedLines)}</span>`
           }
         </div>
@@ -683,18 +877,31 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       return;
     }
     const L = i();
-    const target = catalog.station(state.targetId);
-    const n = mode === "eki" ? eki.guesses.length : moji.rows.length;
+    const n =
+      mode === "eki" ? eki.guesses.length : mode === "moji" ? moji.rows.length : rosen.guesses.length;
     const title = state.status === "won" ? L.won : L.lost;
     const sub = state.status === "won" ? L.wonIn(n) : L.lostAfter(n);
+    const again = play === "practice" || state.kind === "practice";
+    let identity = "";
+    let dossier = "";
+    if (mode === "rosen") {
+      const info = catalog.lineInfo(rosen.targetIndex);
+      identity = `<p class="answer-name">${esc(info.line.n)}</p>`;
+      dossier = lineDossierHtml(info, settings.lang);
+    } else {
+      const target = catalog.station(mode === "eki" ? eki.targetId : (state as MojiState).targetId);
+      identity = `<p class="answer-name">${esc(target.n)}</p>
+        <p>${esc(target.k)} · ${esc(target.r)} · ${esc(prefName(target.p, settings.lang))}</p>`;
+      dossier = stationDossierHtml(catalog, target, settings.lang);
+    }
     box.innerHTML = `<div class="result ${state.status}">
       <h2>${esc(title)}</h2>
       <p>${esc(sub)}</p>
-      <p class="answer-name">${esc(target.n)}</p>
-      <p>${esc(target.k)} · ${esc(target.r)} · ${esc(prefName(target.p, settings.lang))}</p>
+      ${identity}
+      ${dossier}
       <div class="actions">
         <button class="btn primary" data-act="share">${esc(toast || L.share)}</button>
-        ${play === "practice" || state.kind === "practice" ? `<button class="btn" data-act="again">${esc(L.playAgain)}</button>` : ""}
+        ${again ? `<button class="btn" data-act="again">${esc(mode === "rosen" ? L.playAgainLine : L.playAgain)}</button>` : ""}
       </div>
       ${state.kind === "daily" ? `<p class="countdown" id="countdown"></p>` : ""}
     </div>`;
@@ -715,9 +922,31 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
 
   function paintMap(): void {
     const canvas = document.getElementById("map") as HTMLCanvasElement | null;
-    if (!canvas || mode !== "eki") return;
+    if (!canvas || mode === "moji") return;
+    if (mode === "rosen") {
+      const reveal = rosen.status !== "playing";
+      const info = catalog.lineInfo(rosen.targetIndex);
+      if (reveal) {
+        drawLineStations(canvas, rings, catalog.stationsOnLine(info.index), info.line.col);
+      } else {
+        drawJapanMap(canvas, rings, catalog, [], null, false, settings.lang);
+      }
+      return;
+    }
     const target = catalog.station(eki.targetId);
-    drawJapanMap(canvas, rings, catalog, eki.guesses, target, eki.status !== "playing");
+    drawJapanMap(canvas, rings, catalog, eki.guesses, target, eki.status !== "playing", settings.lang);
+  }
+
+  function paintCityStrip(): void {
+    const box = document.getElementById("city-strip");
+    if (!box) return;
+    if (mode !== "eki") {
+      box.innerHTML = "";
+      return;
+    }
+    const last = eki.guesses.length ? catalog.station(eki.guesses[eki.guesses.length - 1]!.id) : null;
+    const target = catalog.station(eki.targetId);
+    box.innerHTML = cityStripHtml(last, target, eki.status !== "playing", settings.lang);
   }
 
   function paintModal(): void {
@@ -741,6 +970,8 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         </div>
         <h3>${esc(L.helpMojiTitle)}</h3>
         <p>${esc(L.helpMoji)}</p>
+        <h3>${esc(L.helpRosenTitle)}</h3>
+        <p>${esc(L.helpRosen)}</p>
         <p>${esc(L.helpDaily)}</p>
       `;
     } else if (modal === "stats") {
@@ -755,7 +986,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         })
         .join("");
       body = `
-        <h2>${esc(L.stats)} · ${esc(mode === "eki" ? L.eki : L.moji)}</h2>
+        <h2>${esc(L.stats)} · ${esc(mode === "eki" ? L.eki : mode === "moji" ? L.moji : L.rosen)}</h2>
         <div class="stat-grid">
           <div><b>${st.played}</b><span>${esc(L.played)}</span></div>
           <div><b>${rate}</b><span>${esc(L.winRate)}</span></div>
@@ -783,6 +1014,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
           <span>${esc(L.colorblind)}</span>
           <button class="btn" data-act="cb">${settings.colorblind ? "ON" : "OFF"}</button>
         </div>
+        <p>${esc(L.scopeHint)}</p>
         <p>${esc(L.dataCredit)}</p>
       `;
     }
