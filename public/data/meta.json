@@ -1,0 +1,14 @@
+{
+  "source": "Seo-4d696b75/station_database",
+  "license": "CC BY 4.0",
+  "tag": "v20260831",
+  "builtAt": "2026-09-01T18:43:17.133Z",
+  "stations": 8987,
+  "lines": 602,
+  "puzzle": 1103,
+  "kana4": 2328,
+  "kana5": 1389,
+  "mora4": 2410,
+  "mora5": 1419,
+  "skipped": 0
+}
