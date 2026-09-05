@@ -4,7 +4,7 @@ import { visibleCodes } from "./codes";
 import type { GameData, Line, Station } from "./types";
 
 function line(partial: Partial<Line> & Pick<Line, "id" | "n">): Line {
-  return { co: 2, cn: "Op", col: "#000", sk: 0, ...partial };
+  return { r: "", ce: "", co: 2, cn: "Op", col: "#000", sk: 0, ...partial };
 }
 
 function st(partial: Partial<Station> & Pick<Station, "id" | "n" | "p" | "lat" | "lng" | "l">): Station {
