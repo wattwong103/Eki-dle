@@ -1,8 +1,12 @@
 export interface Line {
   id: number;
   n: string;
+  /** Title Case romaji of name_kana (English primary). */
+  r: string;
   co: number;
   cn: string;
+  /** English company / operator name. */
+  ce: string;
   col: string;
   sk: number;
 }
