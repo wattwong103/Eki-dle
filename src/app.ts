@@ -12,9 +12,12 @@ import { formatKm } from "./geo";
 import { regionIdName, regionName, t } from "./i18n";
 import { evaluateEki, EKI_MAX, lineChip } from "./eki";
 import { evaluateRosen } from "./rosen";
-import { copyText, shareEki, shareMoji, shareRosen } from "./share";
+import { copyText, shareCode, shareDiagram, shareEki, shareMap, shareMoji, shareRosen } from "./share";
 import { drawJapanMap, drawLineStations, loadJapanRings } from "./map";
+import { MAP_ATTRIBUTION, drawMapView } from "./mapview";
 import { prefName, type RegionId } from "./prefectures";
+import { visibleCodes } from "./codes";
+import { cropForId, cropPath, fallbackDiagramSvg, loadCrops, type DiagramCrop } from "./crops";
 import {
   loadDaily,
   loadSettings,
@@ -67,31 +70,35 @@ function emptyMoji(partial: Omit<MojiState, "rows" | "letters" | "current" | "st
 export async function boot(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) throw new Error("#app missing");
-  const langGuess: Lang = navigator.language.startsWith("ja") ? "ja" : "ja";
+  const langGuess: Lang = navigator.language.startsWith("ja") ? "ja" : "en";
   root.innerHTML = `<div class="boot"><div class="mark">駅</div><p>${esc(t(langGuess).loading)}</p></div>`;
   try {
-    const [gameRes, rings] = await Promise.all([
+    const [gameRes, rings, crops] = await Promise.all([
       fetch("./data/game.json"),
       loadJapanRings(),
+      loadCrops().catch(() => [] as DiagramCrop[]),
     ]);
     if (!gameRes.ok) throw new Error(String(gameRes.status));
     const data = (await gameRes.json()) as GameData;
-    start(root, new Catalog(data), rings);
+    start(root, new Catalog(data), rings, crops);
   } catch (err) {
     console.error(err);
-    root.innerHTML = `<div class="error"><p>${esc(t("ja").loadError)}</p></div>`;
+    root.innerHTML = `<div class="error"><p>${esc(t("en").loadError)}</p></div>`;
   }
 }
 
 type Rings = Awaited<ReturnType<typeof loadJapanRings>>;
 
-function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
+function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: DiagramCrop[]): void {
   const settings: Settings = loadSettings();
   let mode: Mode = "eki";
   let play: PlayKind = "daily";
   let eki = restoreEki();
   let moji = restoreMoji();
   let rosen = restoreRosen();
+  let mapMode = restoreMap();
+  let code = restoreCode();
+  let diagram = restoreDiagram();
   let query = "";
   let suggestions: Station[] = [];
   let lineHits: LineInfo[] = [];
@@ -104,6 +111,9 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     eki: eki.status !== "playing",
     moji: moji.status !== "playing",
     rosen: rosen.status !== "playing",
+    map: mapMode.status !== "playing",
+    code: code.status !== "playing",
+    diagram: diagram.status !== "playing",
   };
 
   applyChrome();
@@ -145,6 +155,27 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     return freshRosen("daily");
   }
 
+  function restoreMap(): EkiState {
+    const dateKey = jstDateKey();
+    const saved = loadDaily<EkiState>("map", dateKey);
+    if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
+    return freshMap("daily");
+  }
+
+  function restoreCode(): EkiState {
+    const dateKey = jstDateKey();
+    const saved = loadDaily<EkiState>("code", dateKey);
+    if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
+    return freshCode("daily");
+  }
+
+  function restoreDiagram(): EkiState {
+    const dateKey = jstDateKey();
+    const saved = loadDaily<EkiState>("diagram", dateKey);
+    if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
+    return freshDiagram("daily");
+  }
+
   function freshEki(kind: PlayKind): EkiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
@@ -175,6 +206,35 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     return { kind, puzzleNo, dateKey, targetIndex, guesses: [], status: "playing" };
   }
 
+  function freshMap(kind: PlayKind): EkiState {
+    const dateKey = jstDateKey();
+    const puzzleNo = puzzleNumber(dateKey);
+    const pool = kind === "practice" ? catalog.puzzleIdsFor(settings.scope) : catalog.puzzleIds;
+    const ids = pool.length ? pool : catalog.puzzleIds;
+    const targetId =
+      kind === "daily" ? pickId(ids, puzzleNo, "map") : randomId(ids);
+    return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
+  }
+
+  function freshCode(kind: PlayKind): EkiState {
+    const dateKey = jstDateKey();
+    const puzzleNo = puzzleNumber(dateKey);
+    const ids = catalog.codeIds.length ? catalog.codeIds : catalog.puzzleIds;
+    const targetId =
+      kind === "daily" ? pickId(ids, puzzleNo, "code") : randomId(ids);
+    return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
+  }
+
+  function freshDiagram(kind: PlayKind): EkiState {
+    const dateKey = jstDateKey();
+    const puzzleNo = puzzleNumber(dateKey);
+    const ids = crops.map((x) => x.id).filter((id) => catalog.byId.has(id));
+    const pool = ids.length ? ids : catalog.puzzleIds;
+    const targetId =
+      kind === "daily" ? pickId(pool, puzzleNo, "diagram") : randomId(pool);
+    return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
+  }
+
   function i() {
     return t(settings.lang);
   }
@@ -201,6 +261,9 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
               <button class="tab" data-act="mode-eki" role="tab">${esc(L.eki)}</button>
               <button class="tab" data-act="mode-moji" role="tab">${esc(L.moji)}</button>
               <button class="tab" data-act="mode-rosen" role="tab">${esc(L.rosen)}</button>
+              <button class="tab" data-act="mode-map" role="tab">${esc(L.map)}</button>
+              <button class="tab" data-act="mode-code" role="tab">${esc(L.code)}</button>
+              <button class="tab" data-act="mode-diagram" role="tab">${esc(L.diagram)}</button>
             </div>
             <div class="pills">
               <button class="pill" data-act="play-daily">${esc(L.daily)}</button>
@@ -222,6 +285,12 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
           <p class="remaining" id="remaining-eki"></p>
           <div class="guess-list" id="tickets"></div>
           <div class="map-wrap"><canvas id="map"></canvas></div>
+          <p class="footer" id="map-attribution" hidden></p>
+          <div class="result" id="code-panel" hidden></div>
+          <div class="result" id="diagram-panel" hidden>
+            <img id="diagram-img" alt="diagram hint" style="width:100%;border-radius:10px;display:block;" />
+            <p class="dossier-meta" id="diagram-meta"></p>
+          </div>
           <div id="city-strip"></div>
         </section>
         <section id="moji-panel" hidden>
@@ -296,14 +365,18 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     if (act === "mode-eki") setMode("eki");
     else if (act === "mode-moji") setMode("moji");
     else if (act === "mode-rosen") setMode("rosen");
+    else if (act === "mode-map") setMode("map");
+    else if (act === "mode-code") setMode("code");
+    else if (act === "mode-diagram") setMode("diagram");
     else if (act === "play-daily") setPlay("daily");
     else if (act === "play-practice") setPlay("practice");
     else if (act?.startsWith("scope-")) {
       const next = act.slice(6) as Scope;
       settings.scope = next;
       saveSettings(settings);
-      if (play === "practice" && mode === "eki") {
-        eki = freshEki("practice");
+      if (play === "practice" && (mode === "eki" || mode === "map")) {
+        if (mode === "eki") eki = freshEki("practice");
+        else mapMode = freshMap("practice");
         query = "";
         const input = document.getElementById("guess") as HTMLInputElement | null;
         if (input) input.value = "";
@@ -368,9 +441,18 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       } else if (mode === "moji") {
         moji = freshMoji("practice");
         recorded.moji = false;
-      } else {
+      } else if (mode === "rosen") {
         rosen = freshRosen("practice");
         recorded.rosen = false;
+      } else if (mode === "map") {
+        mapMode = freshMap("practice");
+        recorded.map = false;
+      } else if (mode === "code") {
+        code = freshCode("practice");
+        recorded.code = false;
+      } else {
+        diagram = freshDiagram("practice");
+        recorded.diagram = false;
       }
       query = "";
       const input = document.getElementById("guess") as HTMLInputElement | null;
@@ -430,9 +512,15 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       eki = restoreEki();
       moji = restoreMoji();
       rosen = restoreRosen();
+      mapMode = restoreMap();
+      code = restoreCode();
+      diagram = restoreDiagram();
     } else if (mode === "eki") eki = freshEki("practice");
     else if (mode === "moji") moji = freshMoji("practice");
-    else rosen = freshRosen("practice");
+    else if (mode === "rosen") rosen = freshRosen("practice");
+    else if (mode === "map") mapMode = freshMap("practice");
+    else if (mode === "code") code = freshCode("practice");
+    else diagram = freshDiagram("practice");
     query = "";
     const input = document.getElementById("guess") as HTMLInputElement | null;
     if (input) input.value = "";
@@ -448,17 +536,29 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
   function currentState(): EkiState | MojiState | RosenState {
     if (mode === "eki") return eki;
     if (mode === "moji") return moji;
-    return rosen;
+    if (mode === "rosen") return rosen;
+    if (mode === "map") return mapMode;
+    if (mode === "code") return code;
+    return diagram;
+  }
+
+  function currentStationState(): EkiState {
+    if (mode === "eki") return eki;
+    if (mode === "map") return mapMode;
+    if (mode === "code") return code;
+    return diagram;
   }
 
   function submitEki(picked?: Station): void {
     const L = i();
-    if (eki.status !== "playing") return;
-    const input = document.getElementById("guess") as HTMLInputElement;
+    if (mode === "moji") return;
     if (mode === "rosen") {
       submitRosen(lineHits[highlight]);
       return;
     }
+    const state = currentStationState();
+    if (state.status !== "playing") return;
+    const input = document.getElementById("guess") as HTMLInputElement;
     const hit =
       picked ??
       suggestions[highlight] ??
@@ -468,22 +568,22 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       paintAlert();
       return;
     }
-    if (eki.guesses.some((g) => g.id === hit.id)) {
+    if (state.guesses.some((g) => g.id === hit.id)) {
       alertMsg = L.alreadyGuessed;
       paintAlert();
       return;
     }
-    const target = catalog.station(eki.targetId);
+    const target = catalog.station(state.targetId);
     const g = evaluateEki(hit, target);
-    eki.guesses.push(g);
+    state.guesses.push(g);
     if (g.id === target.id) {
-      eki.status = "won";
+      state.status = "won";
       burst();
-    } else if (eki.guesses.length >= EKI_MAX) {
-      eki.status = "lost";
+    } else if (state.guesses.length >= EKI_MAX) {
+      state.status = "lost";
     }
-    finishIfNeeded("eki", eki);
-    saveDaily("eki", eki);
+    finishIfNeeded(mode, state);
+    saveDaily(mode, state);
     query = "";
     input.value = "";
     suggestions = [];
@@ -562,7 +662,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     if (recorded[which]) return;
     recorded[which] = true;
     const n =
-      which === "eki"
+      which === "eki" || which === "map" || which === "code" || which === "diagram"
         ? (state as EkiState).guesses.length
         : which === "moji"
           ? (state as MojiState).rows.length
@@ -577,7 +677,13 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         ? shareEki(eki, settings.lang)
         : mode === "moji"
           ? shareMoji(moji, settings.lang)
-          : shareRosen(rosen, settings.lang);
+          : mode === "rosen"
+            ? shareRosen(rosen, settings.lang)
+            : mode === "map"
+              ? shareMap(mapMode, settings.lang)
+              : mode === "code"
+                ? shareCode(code, settings.lang)
+                : shareDiagram(diagram, settings.lang);
     const ok = await copyText(text);
     toast = ok ? L.shared : L.copiedFail;
     paintResult();
@@ -593,7 +699,18 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     const no = document.getElementById("puzzle-no");
     if (no) no.textContent = state.kind === "daily" ? `#${state.puzzleNo}` : L.practice;
     const tag = document.getElementById("tagline");
-    if (tag) tag.textContent = mode === "rosen" ? L.taglineRosen : L.tagline;
+    if (tag) {
+      tag.textContent =
+        mode === "rosen"
+          ? L.taglineRosen
+          : mode === "map"
+            ? L.taglineMap
+            : mode === "code"
+              ? L.taglineCode
+              : mode === "diagram"
+                ? L.taglineDiagram
+                : L.tagline;
+    }
     const footer = document.getElementById("footer");
     if (footer) footer.textContent = L.dataCredit;
 
@@ -603,6 +720,9 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       if (tab.dataset.act === "mode-eki") tab.textContent = L.eki;
       if (tab.dataset.act === "mode-moji") tab.textContent = L.moji;
       if (tab.dataset.act === "mode-rosen") tab.textContent = L.rosen;
+      if (tab.dataset.act === "mode-map") tab.textContent = L.map;
+      if (tab.dataset.act === "mode-code") tab.textContent = L.code;
+      if (tab.dataset.act === "mode-diagram") tab.textContent = L.diagram;
     });
     root.querySelectorAll(".pill").forEach((el) => {
       const p = el as HTMLElement;
@@ -617,7 +737,8 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     if (mojiPanel) mojiPanel.hidden = mode !== "moji";
 
     const guess = document.getElementById("guess") as HTMLInputElement | null;
-    const playingSearch = mode === "rosen" ? rosen.status === "playing" : eki.status === "playing";
+    const playingSearch =
+      mode === "rosen" ? rosen.status === "playing" : mode === "moji" ? false : currentStationState().status === "playing";
     if (guess) {
       guess.placeholder = mode === "rosen" ? L.guessLinePlaceholder : L.guessPlaceholder;
       guess.disabled = !playingSearch;
@@ -641,12 +762,15 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     paintModal();
     paintMap();
     paintCityStrip();
+    paintCodePanel();
+    paintDiagramPanel();
+    paintMapAttribution();
   }
 
   function paintScopes(): void {
     const box = document.getElementById("scope-pills");
     if (!box) return;
-    const show = play === "practice" && mode === "eki";
+    const show = play === "practice" && (mode === "eki" || mode === "map");
     box.hidden = !show;
     if (!show) return;
     box.innerHTML = ALL_SCOPES.map((id) => {
@@ -666,14 +790,18 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
   }
 
   function paintAlert(): void {
-    const el = document.getElementById(mode === "eki" ? "alert" : "moji-alert");
+    const el = document.getElementById(mode === "moji" ? "moji-alert" : "alert");
     if (el) el.textContent = alertMsg;
   }
 
   function paintRemaining(): void {
     const L = i();
     const used =
-      mode === "eki" ? eki.guesses.length : mode === "moji" ? moji.rows.length : rosen.guesses.length;
+      mode === "moji"
+        ? moji.rows.length
+        : mode === "rosen"
+          ? rosen.guesses.length
+          : currentStationState().guesses.length;
     const left = Math.max(0, EKI_MAX - used);
     const playing = currentState().status === "playing";
     const text = playing ? `${L.remaining} ${left} ${L.tries}` : "";
@@ -706,7 +834,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         .join("");
       return;
     }
-    if (!suggestions.length || !playing || mode !== "eki") {
+    if (!suggestions.length || !playing || mode === "moji") {
       box.hidden = true;
       box.innerHTML = "";
       return;
@@ -715,7 +843,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     box.innerHTML = suggestions
       .map((s, i) => {
         const pref = prefName(s.p, settings.lang);
-        const sub = settings.lang === "ja" ? `${s.k} · ${pref}` : `${s.k} · ${s.r} · ${pref}`;
+        const sub = `${s.n} · ${s.k} · ${s.r} · ${pref}`;
         return `<button type="button" data-act="pick" data-id="${s.id}" aria-selected="${i === highlight}">
           <span class="name">${esc(s.n)}</span>
           <span class="meta">${esc(sub)}</span>
@@ -728,6 +856,10 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     const box = document.getElementById("tickets");
     if (!box) return;
     const L = i();
+    if (mode === "moji") {
+      box.innerHTML = "";
+      return;
+    }
     if (mode === "rosen") {
       const target = catalog.lineInfo(rosen.targetIndex);
       box.innerHTML = [...rosen.guesses].reverse().map((g) => {
@@ -764,8 +896,9 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       }).join("");
       return;
     }
-    const target = catalog.station(eki.targetId);
-    box.innerHTML = [...eki.guesses].reverse().map((g) => {
+    const stationState = currentStationState();
+    const target = catalog.station(stationState.targetId);
+    box.innerHTML = [...stationState.guesses].reverse().map((g) => {
       const s = catalog.station(g.id);
       const win = g.id === target.id;
       const lc = lineChip(g);
@@ -878,7 +1011,11 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
     }
     const L = i();
     const n =
-      mode === "eki" ? eki.guesses.length : mode === "moji" ? moji.rows.length : rosen.guesses.length;
+      mode === "moji"
+        ? moji.rows.length
+        : mode === "rosen"
+          ? rosen.guesses.length
+          : currentStationState().guesses.length;
     const title = state.status === "won" ? L.won : L.lost;
     const sub = state.status === "won" ? L.wonIn(n) : L.lostAfter(n);
     const again = play === "practice" || state.kind === "practice";
@@ -889,7 +1026,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       identity = `<p class="answer-name">${esc(info.line.n)}</p>`;
       dossier = lineDossierHtml(info, settings.lang);
     } else {
-      const target = catalog.station(mode === "eki" ? eki.targetId : (state as MojiState).targetId);
+      const target = catalog.station(mode === "moji" ? (state as MojiState).targetId : currentStationState().targetId);
       identity = `<p class="answer-name">${esc(target.n)}</p>
         <p>${esc(target.k)} · ${esc(target.r)} · ${esc(prefName(target.p, settings.lang))}</p>`;
       dossier = stationDossierHtml(catalog, target, settings.lang);
@@ -923,6 +1060,8 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
   function paintMap(): void {
     const canvas = document.getElementById("map") as HTMLCanvasElement | null;
     if (!canvas || mode === "moji") return;
+    const mapWrap = canvas.closest(".map-wrap") as HTMLElement | null;
+    if (mapWrap) mapWrap.hidden = mode === "diagram";
     if (mode === "rosen") {
       const reveal = rosen.status !== "playing";
       const info = catalog.lineInfo(rosen.targetIndex);
@@ -933,20 +1072,69 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
       }
       return;
     }
-    const target = catalog.station(eki.targetId);
-    drawJapanMap(canvas, rings, catalog, eki.guesses, target, eki.status !== "playing", settings.lang);
+    const stationState = currentStationState();
+    const target = catalog.station(stationState.targetId);
+    if (mode === "map") {
+      void drawMapView(canvas, target);
+      return;
+    }
+    drawJapanMap(canvas, rings, catalog, stationState.guesses, target, stationState.status !== "playing", settings.lang);
   }
 
   function paintCityStrip(): void {
     const box = document.getElementById("city-strip");
     if (!box) return;
-    if (mode !== "eki") {
+    if (mode === "moji" || mode === "rosen" || mode === "diagram") {
       box.innerHTML = "";
       return;
     }
-    const last = eki.guesses.length ? catalog.station(eki.guesses[eki.guesses.length - 1]!.id) : null;
-    const target = catalog.station(eki.targetId);
-    box.innerHTML = cityStripHtml(last, target, eki.status !== "playing", settings.lang);
+    const stationState = currentStationState();
+    const last = stationState.guesses.length ? catalog.station(stationState.guesses[stationState.guesses.length - 1]!.id) : null;
+    const target = catalog.station(stationState.targetId);
+    box.innerHTML = cityStripHtml(last, target, stationState.status !== "playing", settings.lang);
+  }
+
+  function paintMapAttribution(): void {
+    const el = document.getElementById("map-attribution");
+    if (!el) return;
+    el.hidden = mode !== "map";
+    if (mode === "map") el.textContent = `${i().mapAttribution} (${MAP_ATTRIBUTION})`;
+  }
+
+  function paintCodePanel(): void {
+    const el = document.getElementById("code-panel");
+    if (!el) return;
+    if (mode !== "code") {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const L = i();
+    const target = catalog.station(code.targetId);
+    const shown = visibleCodes(catalog, target, code.guesses.length).slice(0, EKI_MAX);
+    el.hidden = false;
+    el.innerHTML = `<h3>${esc(L.codeHints)} (${shown.length})</h3><div class="chips">${shown.map((x) => `<span class=\"chip good\">${esc(x)}</span>`).join("")}</div>`;
+  }
+
+  function paintDiagramPanel(): void {
+    const box = document.getElementById("diagram-panel");
+    const img = document.getElementById("diagram-img") as HTMLImageElement | null;
+    const meta = document.getElementById("diagram-meta");
+    if (!box || !img || !meta) return;
+    if (mode !== "diagram") {
+      box.hidden = true;
+      return;
+    }
+    const L = i();
+    const crop = cropForId(crops, diagram.targetId);
+    const target = catalog.station(diagram.targetId);
+    const fallback = fallbackDiagramSvg(target.r || target.n);
+    img.src = crop ? cropPath(crop) : fallback;
+    img.onerror = () => {
+      if (img.src !== fallback) img.src = fallback;
+    };
+    meta.textContent = crop ? `${L.diagramHints}: ${crop.hub}` : L.noDiagramCrop;
+    box.hidden = false;
   }
 
   function paintModal(): void {
@@ -972,6 +1160,12 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         <p>${esc(L.helpMoji)}</p>
         <h3>${esc(L.helpRosenTitle)}</h3>
         <p>${esc(L.helpRosen)}</p>
+        <h3>${esc(L.helpMapTitle)}</h3>
+        <p>${esc(L.helpMap)}</p>
+        <h3>${esc(L.helpCodeTitle)}</h3>
+        <p>${esc(L.helpCode)}</p>
+        <h3>${esc(L.helpDiagramTitle)}</h3>
+        <p>${esc(L.helpDiagram)}</p>
         <p>${esc(L.helpDaily)}</p>
       `;
     } else if (modal === "stats") {
@@ -986,7 +1180,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings): void {
         })
         .join("");
       body = `
-        <h2>${esc(L.stats)} · ${esc(mode === "eki" ? L.eki : mode === "moji" ? L.moji : L.rosen)}</h2>
+        <h2>${esc(L.stats)} · ${esc(mode === "eki" ? L.eki : mode === "moji" ? L.moji : mode === "rosen" ? L.rosen : mode === "map" ? L.map : mode === "code" ? L.code : L.diagram)}</h2>
         <div class="stat-grid">
           <div><b>${st.played}</b><span>${esc(L.played)}</span></div>
           <div><b>${rate}</b><span>${esc(L.winRate)}</span></div>

@@ -191,6 +191,12 @@ input {
   border-radius: 999px;
 }
 
+.tabs {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: thin;
+}
+
 .tab,
 .pill {
   border: 0;

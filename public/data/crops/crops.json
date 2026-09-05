@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "crops": [
+    { "id": 1258, "file": "tokyo.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 1286, "file": "shinjuku.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 1283, "file": "shibuya.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 1290, "file": "ikebukuro.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 1260, "file": "shinagawa.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 1298, "file": "ueno.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 1300, "file": "akihabara.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 5219, "file": "otemachi.png", "hub": "Tokyo", "license": "TBD" },
+    { "id": 2773, "file": "osaka.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 8008, "file": "umeda.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 8011, "file": "namba.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 2827, "file": "tennoji.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 2772, "file": "shin-osaka.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 3053, "file": "kyobashi.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 6021, "file": "yodoyabashi.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 8009, "file": "hommachi.png", "hub": "Osaka", "license": "TBD" },
+    { "id": 2203, "file": "nagoya.png", "hub": "Nagoya", "license": "TBD" },
+    { "id": 1262, "file": "yokohama.png", "hub": "Yokohama", "license": "TBD" },
+    { "id": 2760, "file": "kyoto.png", "hub": "Kyoto", "license": "TBD" },
+    { "id": 2787, "file": "sannomiya.png", "hub": "Kobe", "license": "TBD" }
+  ]
+}
