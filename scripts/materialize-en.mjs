@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/** Materialize EN-first: patch build-data + app, then build line-en.json. */
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
