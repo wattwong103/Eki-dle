@@ -1,1 +1,1 @@
-file:///tmp/app-to-push.ts
+@/tmp/app-to-push.ts
