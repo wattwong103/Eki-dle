@@ -274,6 +274,22 @@ function titleCaseRomaji(r) {
     .join("");
 }
 
+
+function lineRomajiFromKana(nameKana) {
+  let s = (nameKana || "").normalize("NFKC");
+  s = s.replace(/[\u30a1-\u30f6]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60),
+  );
+  let prefix = "";
+  // station_database spells JR as じぇいあーる / じえいあーる
+  if (/^じぇいあーる/.test(s) || /^じえいあーる/.test(s)) {
+    prefix = "JR ";
+    s = s.replace(/^じぇいあーる|^じえいあーる/, "");
+  }
+  const body = titleCaseRomaji(kanaToRomaji(s));
+  return (prefix + body).replace(/\s+/g, " ").trim();
+}
+
 function cleanLineName(name) {
   return name
     .replace(/（.*?）/g, "")
@@ -312,6 +328,39 @@ const COMPANY = {
   179: "名古屋市交",
   195: "京都市交",
   211: "神戸市交",
+  249: "Osaka Metro",
+};
+
+const COMPANY_EN = {
+  1: "JR Hokkaido",
+  2: "JR East",
+  3: "JR Central",
+  4: "JR West",
+  5: "JR Shikoku",
+  6: "JR Kyushu",
+  11: "Tobu",
+  12: "Seibu",
+  13: "Keisei",
+  14: "Keio",
+  15: "Odakyu",
+  16: "Tokyu",
+  17: "Keikyu",
+  18: "Tokyo Metro",
+  19: "Sotetsu",
+  20: "Meitetsu",
+  21: "Kintetsu",
+  22: "Nankai",
+  23: "Keihan",
+  24: "Hankyu",
+  25: "Hanshin",
+  26: "Nishitetsu",
+  101: "Sapporo Municipal",
+  115: "Sendai Municipal",
+  119: "Toei",
+  130: "Yokohama Municipal",
+  179: "Nagoya Municipal",
+  195: "Kyoto Municipal",
+  211: "Kobe Municipal",
   249: "Osaka Metro",
 };
 
@@ -440,13 +489,17 @@ async function main() {
     const company = Number(row[li.company_code] || 0);
     const color = row[li.color] && row[li.color] !== "NULL" ? row[li.color] : "";
     const shinkansen = /新幹線/.test(name);
+    const nameKana = row[li.name_kana] || "";
     const rec = {
       code,
       id: Number(row[li.id]),
       name: cleanLineName(name),
       full: name,
+      kana: nameKana,
+      romaji: lineRomajiFromKana(nameKana || name),
       company,
       companyName: COMPANY[company] || "",
+      companyEn: COMPANY_EN[company] || COMPANY[company] || "",
       color,
       closed,
       shinkansen,
@@ -460,8 +513,10 @@ async function main() {
     compactLines.push({
       id: rec.id,
       n: rec.name,
+      r: rec.romaji,
       co: rec.company,
       cn: rec.companyName,
+      ce: rec.companyEn,
       col: rec.color,
       sk: rec.shinkansen ? 1 : 0,
     });
@@ -585,6 +640,14 @@ async function main() {
   const json = JSON.stringify(payload);
   await writeFile(path.join(OUT, "game.json"), json);
   await writeFile(path.join(OUT, "meta.json"), JSON.stringify(meta, null, 2));
+
+  const lineEn = {};
+  for (const line of compactLines) {
+    lineEn[String(line.id)] = { r: line.r, ce: line.ce };
+  }
+  const lineEnJson = JSON.stringify(lineEn);
+  await writeFile(path.join(OUT, "line-en.json"), lineEnJson);
+  console.log(`wrote ${lineEnJson.length} bytes to public/data/line-en.json`);
 
   console.log(meta);
   console.log(`wrote ${json.length} bytes to public/data/game.json`);
