@@ -7,7 +7,7 @@ export function loadSettings(): Settings {
   const raw = read(`${PREFIX}settings`);
   const s = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
   return {
-    lang: s.lang === "en" ? "en" : "ja",
+    lang: s.lang === "ja" ? "ja" : "en",
     theme: s.theme === "day" ? "day" : "night",
     colorblind: !!s.colorblind,
     scope: isScope(s.scope) ? s.scope : "all",
