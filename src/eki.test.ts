@@ -73,9 +73,9 @@ const data: GameData = {
     mora5: 0,
   },
   lines: [
-    { id: 1, n: "JR山手線", co: 2, cn: "JR東日本", col: "", sk: 0 },
-    { id: 2, n: "東海道新幹線", co: 3, cn: "JR東海", col: "", sk: 1 },
-    { id: 3, n: "JR中央線", co: 2, cn: "JR東日本", col: "", sk: 0 },
+    { id: 1, n: "JR山手線", r: "Yamanotesen", co: 2, cn: "JR東日本", ce: "JR East", col: "", sk: 0 },
+    { id: 2, n: "東海道新幹線", r: "Tokaidoshinkansen", co: 3, cn: "JR東海", ce: "JR Central", col: "", sk: 1 },
+    { id: 3, n: "JR中央線", r: "Chuosen", co: 2, cn: "JR東日本", ce: "JR East", col: "", sk: 0 },
   ],
   stations: [tokyo, shinjuku, sapporo, hakata],
 };
