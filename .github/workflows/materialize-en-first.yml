@@ -1,0 +1,35 @@
+name: Materialize EN-first sources
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/en-first-labels]
+    paths:
+      - "scripts/build-data.b64.p*"
+      - "scripts/app.ts.gz.b64.p*"
+      - "scripts/restore-*.mjs"
+      - "scripts/materialize-en.mjs"
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/en-first-labels
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Materialize from parts
+        run: node scripts/materialize-en.mjs
+      - name: Commit materialized sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/build-data.mjs src/app.ts || true
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore: materialize build-data.mjs and src/app.ts from EN-first parts"
+            git push
+          fi
