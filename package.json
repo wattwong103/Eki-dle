@@ -9,10 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "data": "node scripts/build-data.mjs",
-    "materialize": "node scripts/materialize-crops.mjs",
-    "predev": "node scripts/materialize-crops.mjs && node scripts/assemble-app.mjs",
-    "pretest": "node scripts/materialize-crops.mjs && node scripts/assemble-app.mjs",
-    "prebuild": "node scripts/materialize-crops.mjs && node scripts/assemble-app.mjs"
+    "generate-crops": "node scripts/install-generate-crops.mjs && node scripts/generate-crop-svgs.mjs",
+    "predev": "npm run generate-crops && node scripts/assemble-app.mjs",
+    "pretest": "npm run generate-crops && node scripts/assemble-app.mjs",
+    "prebuild": "npm run generate-crops && node scripts/assemble-app.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
