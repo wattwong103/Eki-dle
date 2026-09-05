@@ -7,6 +7,7 @@ if (!idArg || !fileArg || !hubArg) {
     "Usage: node scripts/add-crop.mjs <stationId> <file> <hub> [license] [sourceImagePath]",
   );
   console.error("  If sourceImagePath is provided, copies it into public/data/crops/<file>.");
+  console.error("  Otherwise run: npm run generate-crops  (spider SVG from game.json).");
   process.exit(1);
 }
 
@@ -51,6 +52,7 @@ fs.writeFileSync(manifestPath, `${JSON.stringify(raw, null, 2)}\n`);
 
 const assetPath = path.join(cropsDir, fileArg);
 if (!fs.existsSync(assetPath)) {
-  console.warn(`Warning: asset missing at ${assetPath} (manifest updated anyway)`);
+  console.warn(`Warning: asset missing at ${assetPath}`);
+  console.warn("Run: npm run generate-crops");
 }
 console.log(`Updated ${manifestPath} (${next.id})`);
