@@ -1,0 +1,158 @@
+ - 1]!.id) : null;
+    const target = catalog.station(stationState.targetId);
+    box.innerHTML = cityStripHtml(last, target, stationState.status !== "playing", settings.lang);
+  }
+
+  function paintMapAttribution(): void {
+    const el = document.getElementById("map-attribution");
+    if (!el) return;
+    el.hidden = mode !== "map";
+    if (mode === "map") el.textContent = `${i().mapAttribution} (${MAP_ATTRIBUTION})`;
+  }
+
+  function paintCodePanel(): void {
+    const el = document.getElementById("code-panel");
+    if (!el) return;
+    if (mode !== "code") {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const L = i();
+    const target = catalog.station(code.targetId);
+    const shown = visibleCodes(catalog, target, code.guesses.length, settings.lang).slice(0, EKI_MAX);
+    const chips = shown
+      .map((x) => {
+        if (x.kind === "code") {
+          const style = x.color ? ` style="--lc:${esc(x.color)}"` : "";
+          return `<span class="chip line good"${style}>${esc(x.code)}</span>`;
+        }
+        return `<span class="chip">${esc(x.label)}</span>`;
+      })
+      .join("");
+    el.hidden = false;
+    el.innerHTML = `<h3>${esc(L.codeHints)} (${shown.length})</h3><div class="chips">${chips}</div>`;
+  }
+
+  function paintDiagramPanel(): void {
+    const box = document.getElementById("diagram-panel");
+    const img = document.getElementById("diagram-img") as HTMLImageElement | null;
+    const meta = document.getElementById("diagram-meta");
+    if (!box || !img || !meta) return;
+    if (mode !== "diagram") {
+      box.hidden = true;
+      return;
+    }
+    const L = i();
+    const crop = cropForId(crops, diagram.targetId);
+    const target = catalog.station(diagram.targetId);
+    const fallback = spiderDiagramSvg(catalog, target);
+    img.src = crop ? cropPath(crop) : fallback;
+    img.onerror = () => {
+      if (img.src !== fallback) img.src = fallback;
+    };
+    meta.textContent = crop ? `${L.diagramHints}: ${crop.hub}` : L.noDiagramCrop;
+    box.hidden = false;
+  }
+
+  function paintModal(): void {
+    const slot = document.getElementById("modal-slot");
+    if (!slot) return;
+    if (!modal) {
+      slot.innerHTML = "";
+      return;
+    }
+    const L = i();
+    let body = "";
+    if (modal === "help") {
+      body = `
+        <h2>${esc(L.howTo)}</h2>
+        <h3>${esc(L.helpEkiTitle)}</h3>
+        <p>${esc(L.helpEki)}</p>
+        <div class="legend">
+          <span class="swatch"><i class="g"></i>${esc(L.samePref)}</span>
+          <span class="swatch"><i class="y"></i>${esc(L.nearPref)}</span>
+          <span class="swatch"><i class="x"></i>${esc(L.farPref)}</span>
+        </div>
+        <h3>${esc(L.helpMojiTitle)}</h3>
+        <p>${esc(L.helpMoji)}</p>
+        <h3>${esc(L.helpRosenTitle)}</h3>
+        <p>${esc(L.helpRosen)}</p>
+        <h3>${esc(L.helpMapTitle)}</h3>
+        <p>${esc(L.helpMap)}</p>
+        <h3>${esc(L.helpCodeTitle)}</h3>
+        <p>${esc(L.helpCode)}</p>
+        <h3>${esc(L.helpDiagramTitle)}</h3>
+        <p>${esc(L.helpDiagram)}</p>
+        <p>${esc(L.helpDaily)}</p>
+      `;
+    } else if (modal === "stats") {
+      const st = loadStats(mode);
+      const rate = st.played ? Math.round((st.wins / st.played) * 100) : 0;
+      const max = Math.max(1, ...st.dist);
+      const dist = st.dist
+        .map((n, i) => {
+          const label = i === 6 ? L.fail : String(i + 1);
+          const w = Math.round((n / max) * 100);
+          return `<div class="dist-row"><span>${esc(label)}</span><div class="dist-bar" style="width:${w}%"></div><span>${n}</span></div>`;
+        })
+        .join("");
+      body = `
+        <h2>${esc(L.stats)} · ${esc(mode === "eki" ? L.eki : mode === "moji" ? L.moji : mode === "rosen" ? L.rosen : mode === "map" ? L.map : mode === "code" ? L.code : L.diagram)}</h2>
+        <div class="stat-grid">
+          <div><b>${st.played}</b><span>${esc(L.played)}</span></div>
+          <div><b>${rate}</b><span>${esc(L.winRate)}</span></div>
+          <div><b>${st.streak}</b><span>${esc(L.streak)}</span></div>
+          <div><b>${st.maxStreak}</b><span>${esc(L.maxStreak)}</span></div>
+        </div>
+        <h3>${esc(L.distTitle)}</h3>
+        <div class="dist">${dist}</div>
+      `;
+    } else {
+      body = `
+        <h2>${esc(L.settings)}</h2>
+        <div class="setting-row">
+          <span>${esc(L.language)}</span>
+          <div class="toggle">
+            <button class="btn" data-act="lang-ja" ${settings.lang === "ja" ? 'style="background:var(--accent);color:#fff"' : ""}>日本語</button>
+            <button class="btn" data-act="lang-en" ${settings.lang === "en" ? 'style="background:var(--accent);color:#fff"' : ""}>English</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span>${esc(L.theme)}</span>
+          <button class="btn" data-act="theme">${esc(settings.theme === "night" ? L.night : L.day)}</button>
+        </div>
+        <div class="setting-row">
+          <span>${esc(L.colorblind)}</span>
+          <button class="btn" data-act="cb">${settings.colorblind ? "ON" : "OFF"}</button>
+        </div>
+        <p>${esc(L.scopeHint)}</p>
+        <p>${esc(L.dataCredit)}</p>
+      `;
+    }
+    slot.innerHTML = `<div class="modal-back" data-act="close"><div class="modal" data-act="noop">${body}
+      <div class="actions"><button class="btn primary" data-act="close">${esc(L.close)}</button></div>
+    </div></div>`;
+  }
+
+  function burst(): void {
+    const layer = document.getElementById("burst");
+    if (!layer) return;
+    const glyphs = ["🚉", "🎫", "🚄", "🚃", "✨"];
+    layer.innerHTML = "";
+    for (let i = 0; i < 18; i++) {
+      const span = document.createElement("span");
+      span.textContent = glyphs[i % glyphs.length]!;
+      const dx = (Math.random() - 0.5) * 280;
+      const dy = -80 - Math.random() * 180;
+      const rot = `${(Math.random() - 0.5) * 220}deg`;
+      span.style.setProperty("--dx", `${dx}px`);
+      span.style.setProperty("--dy", `${dy}px`);
+      span.style.setProperty("--rot", rot);
+      layer.appendChild(span);
+    }
+    setTimeout(() => {
+      layer.innerHTML = "";
+    }, 1200);
+  }
+}
