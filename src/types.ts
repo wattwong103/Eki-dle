@@ -21,6 +21,14 @@ export interface Station {
   l: number[];
   co: number[];
   f: number;
+  /** Per-line register info: [lineIndex, stationNumbering ("M09" or ""), stopOrder]. */
+  c?: [number, string, number][];
+}
+
+export interface StationCode {
+  line: number;
+  code: string;
+  order: number;
 }
 
 export interface GameMeta {
@@ -48,7 +56,7 @@ export const FLAG_SHINKANSEN = 2;
 
 export type Lang = "ja" | "en";
 export type Theme = "night" | "day";
-export type Mode = "eki" | "moji" | "rosen";
+export type Mode = "eki" | "moji" | "rosen" | "map" | "code" | "diagram";
 export type PlayKind = "daily" | "practice";
 export type TileKind = "correct" | "present" | "absent" | "empty";
 export type Scope =

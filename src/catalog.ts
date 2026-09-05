@@ -45,6 +45,7 @@ export class Catalog {
   readonly data: GameData;
   readonly byId = new Map<number, Station>();
   readonly puzzleIds: number[];
+  readonly codeIds: number[];
   readonly mojiIds: number[];
   readonly mojiKana = new Set<string>();
   readonly lines: LineInfo[];
@@ -93,6 +94,9 @@ export class Catalog {
       ...data.stations.filter((s) => s.f & FLAG_PUZZLE).map((s) => s.id),
       ...extra,
     ])];
+    this.codeIds = data.stations
+      .filter((s) => codesForStation(s).length >= 1)
+      .map((s) => s.id);
 
     this.mojiIds = data.stations
       .filter((s) => kanaChars(s.k).length === MOJI_LEN)
@@ -140,6 +144,18 @@ export class Catalog {
 
   stationsOnLine(index: number): Station[] {
     return this.data.stations.filter((s) => s.l.includes(index));
+  }
+
+  codesFor(s: Station): { line: number; code: string; order: number }[] {
+    return codesForStation(s);
+  }
+
+  stationsOnLineSorted(index: number): Station[] {
+    const orderOf = (s: Station): number => {
+      const c = (s.c ?? []).find((x) => x[0] === index);
+      return c ? c[2] : Number.MAX_SAFE_INTEGER;
+    };
+    return this.stationsOnLine(index).sort((a, b) => orderOf(a) - orderOf(b));
   }
 
   puzzleIdsFor(scope: Scope): number[] {
@@ -205,6 +221,16 @@ export class Catalog {
   isMojiWord(kana: string): boolean {
     return this.mojiKana.has(kanaChars(kana).join(""));
   }
+}
+
+export function codesForStation(s: Station): { line: number; code: string; order: number }[] {
+  const raw = s.c ?? [];
+  const out: { line: number; code: string; order: number }[] = [];
+  for (const [line, code, order] of raw) {
+    if (code && code.trim()) out.push({ line, code: code.trim(), order });
+  }
+  out.sort((a, b) => a.code.localeCompare(b.code));
+  return out;
 }
 
 export function normalizeQuery(raw: string): string {

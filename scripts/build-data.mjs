@@ -482,7 +482,7 @@ async function main() {
       address: row[si.address] || "",
       open: row[si.open_date] || "",
       closed: Number(row[si.closed]) === 1,
-      lineCodes: new Set(),
+      lineCodes: new Map(),
     });
   }
 
@@ -490,7 +490,15 @@ async function main() {
     const sc = Number(row[ri.station_code]);
     const lc = Number(row[ri.line_code]);
     const st = stationsByCode.get(sc);
-    if (st) st.lineCodes.add(lc);
+    if (st) {
+      const order = Number(row[ri.index] || 0);
+      const rawNum = row[ri.numbering];
+      const numbering = rawNum && rawNum !== "NULL" ? String(rawNum).trim() : "";
+      const prev = st.lineCodes.get(lc);
+      // Keep first-seen order/numbering; register should be unique per pair.
+      if (!prev) st.lineCodes.set(lc, { order, numbering });
+      else if (!prev.numbering && numbering) st.lineCodes.set(lc, { order, numbering });
+    }
   }
 
   const stations = [];
@@ -506,15 +514,17 @@ async function main() {
       continue;
     }
     const lineIdx = [];
+    const codes = [];
     let shinkansen = false;
     const companies = new Set();
-    for (const lc of st.lineCodes) {
+    for (const [lc, reg] of st.lineCodes) {
       const idx = lineIndexByCode.get(lc);
       if (idx === undefined) continue;
       lineIdx.push(idx);
       const line = compactLines[idx];
       if (line.sk) shinkansen = true;
       if (line.co) companies.add(line.co);
+      codes.push([idx, reg.numbering || "", Number.isFinite(reg.order) ? reg.order : 0]);
     }
     if (lineIdx.length === 0) {
       skipped++;
@@ -524,6 +534,9 @@ async function main() {
     const romaji = titleCaseRomaji(kanaToRomaji(kana || st.kana));
     const puzzle = lineIdx.length >= 2 || shinkansen;
     const year = st.open && st.open !== "NULL" ? Number(String(st.open).slice(0, 4)) : 0;
+    // Keep line index order stable (sorted) and carry codes alongside.
+    const paired = lineIdx.map((idx, i) => ({ idx, code: codes[i] }));
+    paired.sort((a, b) => a.idx - b.idx);
     stations.push({
       id: st.id,
       n: st.name,
@@ -535,15 +548,17 @@ async function main() {
       y: Number.isFinite(year) && year > 1800 ? year : 0,
       lat: Math.round(st.lat * 1e6) / 1e6,
       lng: Math.round(st.lng * 1e6) / 1e6,
-      l: lineIdx,
+      l: paired.map((x) => x.idx),
       co: [...companies],
       f: (puzzle ? 1 : 0) | (shinkansen ? 2 : 0),
+      c: paired.map((x) => x.code),
     });
   }
 
   stations.sort((a, b) => a.id - b.id);
 
   const puzzleIds = stations.filter((s) => s.f & 1).map((s) => s.id);
+  const codedIds = stations.filter((s) => (s.c || []).some((x) => x[1])).map((s) => s.id);
   const kana5 = stations.filter((s) => [...s.k].length === 5);
   const kana4 = stations.filter((s) => [...s.k].length === 4);
   const mora4 = stations.filter((s) => moraCount(s.k) === 4);
@@ -557,6 +572,7 @@ async function main() {
     stations: stations.length,
     lines: compactLines.length,
     puzzle: puzzleIds.length,
+    coded: codedIds.length,
     kana4: kana4.length,
     kana5: kana5.length,
     mora4: mora4.length,
