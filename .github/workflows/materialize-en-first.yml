@@ -4,8 +4,7 @@ on:
   push:
     branches: [fix/en-first-labels]
     paths:
-      - "scripts/build-data.b64.p*"
-      - "scripts/app.ts.gz.b64.p*"
+      - "scripts/*.b64.p*"
       - "scripts/restore-*.mjs"
       - "scripts/materialize-en.mjs"
 jobs:
@@ -26,10 +25,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/build-data.mjs src/app.ts || true
+          git add scripts/build-data.mjs src/app.ts public/data/line-en.json || true
           if git diff --staged --quiet; then
             echo "No changes"
           else
-            git commit -m "chore: materialize build-data.mjs and src/app.ts from EN-first parts"
+            git commit -m "chore: materialize EN-first build-data, app.ts, line-en.json"
             git push
           fi
