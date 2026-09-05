@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "data": "node scripts/build-data.mjs",
-    "generate-crops": "node scripts/install-generate-crops.mjs && node scripts/generate-crop-svgs.mjs"
+    "generate-crops": "node scripts/install-generate-crops.mjs && node scripts/generate-crop-svgs.mjs",
+    "data:line-en": "node scripts/build-line-en.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
