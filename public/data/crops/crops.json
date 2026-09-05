@@ -2,6 +2,62 @@
   "version": 1,
   "crops": [
     {
+      "id": 1258,
+      "file": "tokyo.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 1286,
+      "file": "shinjuku.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 1283,
+      "file": "shibuya.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 1290,
+      "file": "ikebukuro.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 1260,
+      "file": "shinagawa.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 1298,
+      "file": "ueno.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 1300,
+      "file": "akihabara.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 5219,
+      "file": "otemachi.svg",
+      "hub": "Tokyo",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
       "id": 2773,
       "file": "osaka.svg",
       "hub": "Osaka",
@@ -23,8 +79,22 @@
       "license": "CC BY 4.0"
     },
     {
+      "id": 2827,
+      "file": "tennoji.svg",
+      "hub": "Osaka",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
       "id": 2772,
       "file": "shin-osaka.svg",
+      "hub": "Osaka",
+      "source": "Generated from station_database",
+      "license": "CC BY 4.0"
+    },
+    {
+      "id": 3053,
+      "file": "kyobashi.svg",
       "hub": "Osaka",
       "source": "Generated from station_database",
       "license": "CC BY 4.0"

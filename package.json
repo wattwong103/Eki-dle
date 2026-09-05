@@ -9,9 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "data": "node scripts/build-data.mjs",
-    "predev": "node scripts/assemble-app.mjs",
-    "pretest": "node scripts/assemble-app.mjs",
-    "prebuild": "node scripts/assemble-app.mjs"
+    "materialize": "node scripts/materialize-crops.mjs",
+    "predev": "node scripts/materialize-crops.mjs && node scripts/assemble-app.mjs",
+    "pretest": "node scripts/materialize-crops.mjs && node scripts/assemble-app.mjs",
+    "prebuild": "node scripts/materialize-crops.mjs && node scripts/assemble-app.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
