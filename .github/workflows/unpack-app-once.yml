@@ -1,0 +1,24 @@
+name: Unpack app once
+on:
+  workflow_dispatch:
+  push:
+    branches: [copilot/implement-new-en-first-modes]
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          if [ ! -f scripts/app-src/app.ts.gz.b64.p0 ]; then echo skip; exit 0; fi
+          node scripts/assemble-app.mjs
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm -f scripts/assemble-app.mjs
+          git rm -rf scripts/app-src
+          git rm -f .github/workflows/unpack-app-once.yml || true
+          git add src/app.ts
+          git commit -m "Commit fully assembled src/app.ts and remove assemble hack"
+          git push
