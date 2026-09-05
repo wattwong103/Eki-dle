@@ -1,6 +1,7 @@
-import { Catalog, type LineInfo } from "./catalog";
+import { applyLineEnLabels, Catalog, type LineInfo } from "./catalog";
 import { ALL_SCOPES, METROS, cityStripHtml, metroName } from "./cities";
 import { lineChipHtml, lineDossierHtml, stationDossierHtml } from "./dossier";
+import { linePrimary, operatorName, stationPrimary, stationSecondary } from "./labels";
 import {
   jstDateKey,
   nextJstMidnightMs,
@@ -73,13 +74,27 @@ export async function boot(): Promise<void> {
   const langGuess: Lang = navigator.language.startsWith("ja") ? "ja" : "en";
   root.innerHTML = `<div class="boot"><div class="mark">駅</div><p>${esc(t(langGuess).loading)}</p></div>`;
   try {
-    const [gameRes, rings, crops] = await Promise.all([
+    const [gameRes, rings, crops, lineEnRes] = await Promise.all([
       fetch("./data/game.json"),
       loadJapanRings(),
       loadCrops().catch(() => [] as DiagramCrop[]),
+      fetch("./data/line-en.json").catch(() => null),
     ]);
     if (!gameRes.ok) throw new Error(String(gameRes.status));
-    const data = (await gameRes.json()) as GameData;
+    let data = (await gameRes.json()) as GameData;
+    if (lineEnRes && lineEnRes.ok) {
+      try {
+        const labels = (await lineEnRes.json()) as Record<string, { r?: string; ce?: string }>;
+        data = applyLineEnLabels(data, labels);
+      } catch {
+        /* sidecar optional */
+      }
+    }
+    // Ensure line English fields exist even without sidecar / rebuilt game.json.
+    for (const line of data.lines) {
+      if (line.r == null) line.r = "";
+      if (line.ce == null) line.ce = "";
+    }
     start(root, new Catalog(data), rings, crops);
   } catch (err) {
     console.error(err);
@@ -424,7 +439,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
       const idx = Number(btn.dataset.id);
       const info = catalog.lines[idx];
       if (info) {
-        query = info.line.n;
+        query = settings.lang === "en" ? linePrimary(info.line, "en") : info.line.n;
         const input = document.getElementById("guess") as HTMLInputElement;
         input.value = query;
         lineHits = [];
@@ -825,9 +840,14 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
       const unit = i().stationsUnit;
       box.innerHTML = lineHits
         .map((info, idx) => {
-          const sub = `${info.line.cn || "—"} · ${info.count}${unit}`;
+          const primary = linePrimary(info.line, settings.lang);
+          const op = operatorName(info.line, settings.lang) || "—";
+          const sub =
+            settings.lang === "en"
+              ? `${info.line.n} · ${op} · ${info.count}${unit}`
+              : `${op} · ${info.count}${unit}`;
           return `<button type="button" data-act="pick-line" data-id="${info.index}" aria-selected="${idx === highlight}">
-            <span class="name">${esc(info.line.n)}</span>
+            <span class="name">${esc(primary)}</span>
             <span class="meta">${esc(sub)}</span>
           </button>`;
         })
@@ -843,9 +863,11 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
     box.innerHTML = suggestions
       .map((s, i) => {
         const pref = prefName(s.p, settings.lang);
-        const sub = `${s.n} · ${s.k} · ${s.r} · ${pref}`;
+        const primary = stationPrimary(s, settings.lang);
+        const secondary = stationSecondary(s, settings.lang);
+        const sub = `${secondary} · ${pref}`;
         return `<button type="button" data-act="pick" data-id="${s.id}" aria-selected="${i === highlight}">
-          <span class="name">${esc(s.n)}</span>
+          <span class="name">${esc(primary)}</span>
           <span class="meta">${esc(sub)}</span>
         </button>`;
       })
@@ -872,21 +894,31 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
               ? `+${g.countDelta} · ${L.moreStations}`
               : `${g.countDelta} · ${L.fewerStations}`;
         const prefs = g.sharedPrefs.slice(0, 3).map((p) => prefName(p, settings.lang));
+        const primary = linePrimary(info.line, settings.lang);
+        const secondary = settings.lang === "en" ? info.line.n : (info.line.r || "");
+        const op = operatorName(info.line, settings.lang) || "—";
+        const opLabel = settings.lang === "en" ? `Op: ${op}` : op;
+        const regionLabel = settings.lang === "en"
+          ? `Region: ${regionIdName(info.region, settings.lang)}`
+          : regionIdName(info.region, settings.lang);
+        const countChip = settings.lang === "en"
+          ? `${info.count} stops`
+          : `${info.count}${L.stationsUnit}`;
+        const prefChip = prefs.length
+          ? (settings.lang === "en" ? `Prefs: ${prefs.join(" · ")}` : prefs.join(" · "))
+          : L.noSharedPrefs;
         return `<article class="ticket ${g.sameRegion ? "pref-same" : g.sharedPrefs.length ? "pref-near" : "pref-far"} ${win ? "is-win" : ""}">
           <div class="ticket-top">
             <div>
-              <span class="st-name">${esc(info.line.n)}</span>
+              <span class="st-name">${esc(primary)}</span>
+              ${secondary ? `<span class="st-roma">${esc(secondary)}</span>` : ""}
             </div>
           </div>
           <div class="chips">
-            <span class="chip ${g.sameCompany ? "good" : ""}">${esc(info.line.cn || "—")}</span>
-            <span class="chip ${g.sameRegion ? "good" : ""}">${esc(regionIdName(info.region, settings.lang))}</span>
-            <span class="chip">${info.count}${esc(L.stationsUnit)}</span>
-            ${
-              prefs.length
-                ? `<span class="chip close">${esc(prefs.join(" · "))}</span>`
-                : `<span class="chip">${esc(L.noSharedPrefs)}</span>`
-            }
+            <span class="chip ${g.sameCompany ? "good" : ""}">${esc(opLabel)}</span>
+            <span class="chip ${g.sameRegion ? "good" : ""}">${esc(regionLabel)}</span>
+            <span class="chip">${esc(countChip)}</span>
+            <span class="chip ${prefs.length ? "close" : ""}">${esc(prefChip)}</span>
             ${info.line.sk ? `<span class="chip ${target.line.sk ? "good" : ""}">${esc(L.shinkansen)}</span>` : ""}
           </div>
           <div class="metrics">
@@ -906,11 +938,13 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
         .map((idx) => catalog.line(idx))
         .filter((x): x is NonNullable<typeof x> => !!x)
         .slice(0, 4);
+      const primary = stationPrimary(s, settings.lang);
+      const secondary = stationSecondary(s, settings.lang);
       return `<article class="ticket pref-${g.pref} ${win ? "is-win" : ""}">
         <div class="ticket-top">
           <div>
-            <span class="st-name">${esc(s.n)}</span>
-            <span class="st-roma">${esc(s.r)}</span>
+            <span class="st-name">${esc(primary)}</span>
+            <span class="st-roma">${esc(secondary)}</span>
           </div>
         </div>
         <div class="chips">
@@ -919,7 +953,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
           <span class="chip ${g.sameRegion ? "good" : ""}">${esc(regionName(s.p, settings.lang))}</span>
           ${
             shared.length
-              ? shared.map((ln) => lineChipHtml(ln.n, ln.col, "good")).join("")
+              ? shared.map((ln) => lineChipHtml(linePrimary(ln, settings.lang), ln.col, "good")).join("")
               : `<span class="chip ${lc === "present" ? "close" : ""}">${esc(lc === "present" ? L.sameCompany : L.noSharedLines)}</span>`
           }
         </div>
@@ -1023,12 +1057,16 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
     let dossier = "";
     if (mode === "rosen") {
       const info = catalog.lineInfo(rosen.targetIndex);
-      identity = `<p class="answer-name">${esc(info.line.n)}</p>`;
+      const primary = linePrimary(info.line, settings.lang);
+      const secondary = settings.lang === "en" ? info.line.n : (info.line.r || "");
+      identity = `<p class="answer-name">${esc(primary)}</p>${
+        secondary ? `<p>${esc(secondary)}</p>` : ""
+      }`;
       dossier = lineDossierHtml(info, settings.lang);
     } else {
       const target = catalog.station(mode === "moji" ? (state as MojiState).targetId : currentStationState().targetId);
-      identity = `<p class="answer-name">${esc(target.n)}</p>
-        <p>${esc(target.k)} · ${esc(target.r)} · ${esc(prefName(target.p, settings.lang))}</p>`;
+      identity = `<p class="answer-name">${esc(stationPrimary(target, settings.lang))}</p>
+        <p>${esc(stationSecondary(target, settings.lang))} · ${esc(prefName(target.p, settings.lang))}</p>`;
       dossier = stationDossierHtml(catalog, target, settings.lang);
     }
     box.innerHTML = `<div class="result ${state.status}">
