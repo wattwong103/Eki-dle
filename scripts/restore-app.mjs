@@ -1,12 +1,38 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
+/**
+ * Restore src/app.ts: download pre-EN app from main, apply app.en.patch.
+ */
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(dir, "..");
-const parts = ["app.ts.gz.b64.p0","app.ts.gz.b64.p1","app.ts.gz.b64.p2","app.ts.gz.b64.p3"];
-const b64 = parts.map((p) => readFileSync(path.join(dir, p), "utf8")).join("");
-const buf = gunzipSync(Buffer.from(b64, "base64"));
-writeFileSync(path.join(root, "src/app.ts"), buf);
-console.log("wrote src/app.ts", buf.length);
+const target = path.join(root, "src", "app.ts");
+const patchFile = path.join(dir, "app.en.patch");
+
+const url = "https://raw.githubusercontent.com/wattwong103/Eki-dle/main/src/app.ts";
+const res = await fetch(url);
+if (!res.ok) throw new Error(`fetch main app.ts failed: ${res.status}`);
+writeFileSync(target, await res.text());
+
+if (!existsSync(patchFile)) {
+  console.log("no app.en.patch; left main app.ts");
+  process.exit(0);
+}
+
+const r = spawnSync("patch", ["-p1", "--batch", "-i", patchFile], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (r.status !== 0) {
+  console.error(r.stdout, r.stderr);
+  process.exit(r.status ?? 1);
+}
+const out = readFileSync(target, "utf8");
+if (!out.includes("applyLineEnLabels")) {
+  console.error("patch applied but applyLineEnLabels missing");
+  process.exit(1);
+}
+console.log("patched src/app.ts", out.length);

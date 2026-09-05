@@ -4,9 +4,10 @@ on:
   push:
     branches: [fix/en-first-labels]
     paths:
-      - "scripts/*.b64.p*"
+      - "scripts/*.en.patch"
       - "scripts/restore-*.mjs"
       - "scripts/materialize-en.mjs"
+      - "scripts/build-line-en.mjs"
 jobs:
   materialize:
     runs-on: ubuntu-latest
@@ -19,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Materialize from parts
+      - name: Materialize from patches + line-en builder
         run: node scripts/materialize-en.mjs
       - name: Commit materialized sources
         run: |
