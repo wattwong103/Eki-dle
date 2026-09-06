@@ -12,12 +12,16 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set -euo pipefail
-          if [ ! -f scripts/app-src/app.ts.gz.b64.p0 ]; then echo skip; exit 0; fi
-          node scripts/assemble-app.mjs
+          if [ ! -f patches/area-picker-app.patch ]; then echo "no patch; skip"; exit 0; fi
+          if grep -q "dailySalt" src/app.ts 2>/dev/null; then echo "already restored; skip"; exit 0; fi
+          curl -fsSL "https://raw.githubusercontent.com/wattwong103/Eki-dle/main/src/app.ts" -o src/app.ts
+          patch -p1 < patches/area-picker-app.patch
+          grep -q "dailySalt" src/app.ts
+          grep -q "scope-panel" src/app.ts
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git rm -f scripts/assemble-app.mjs
-          git rm -rf scripts/app-src
+          git rm -f scripts/assemble-app.mjs || true
+          git rm -rf scripts/app-src || true
           git rm -f .github/workflows/unpack-app-once.yml || true
           git rm -f patches/area-picker-app.patch || true
           rmdir patches 2>/dev/null || true
