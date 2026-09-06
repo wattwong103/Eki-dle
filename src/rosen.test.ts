@@ -4,7 +4,7 @@ import { evaluateRosen } from "./rosen";
 import type { GameData, Line, Station } from "./types";
 
 function line(partial: Partial<Line> & Pick<Line, "id" | "n">): Line {
-  return { co: 2, cn: "JR東日本", col: "#9ACD32", sk: 0, ...partial };
+  return { r: "", ce: "", co: 2, cn: "JR東日本", col: "#9ACD32", sk: 0, ...partial };
 }
 
 function st(

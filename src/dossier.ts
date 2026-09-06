@@ -1,5 +1,6 @@
 import type { Catalog, LineInfo } from "./catalog";
 import { t, regionIdName, regionName } from "./i18n";
+import { linePrimary, operatorName } from "./labels";
 import { prefName } from "./prefectures";
 import type { Lang, Station } from "./types";
 
@@ -30,12 +31,15 @@ export function lineRibbonHtml(
 export function stationDossierHtml(catalog: Catalog, s: Station, lang: Lang): string {
   const L = t(lang);
   const lines = catalog.linesFor(s);
-  const ops = [...new Set(lines.map((l) => l.cn).filter(Boolean))];
-  const wiki = `https://ja.wikipedia.org/wiki/${encodeURIComponent(`${s.o || s.n}駅`)}`;
+  const ops = [...new Set(lines.map((l) => operatorName(l, lang)).filter(Boolean))];
+  const wiki =
+    lang === "en"
+      ? `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(`${s.r || s.n} Station`)}`
+      : `https://ja.wikipedia.org/wiki/${encodeURIComponent(`${s.o || s.n}駅`)}`;
   const maps = `https://www.google.com/maps?q=${s.lat},${s.lng}`;
   const lineChips = lines
     .slice(0, 8)
-    .map((l) => lineChipHtml(l.n, l.col))
+    .map((l) => lineChipHtml(linePrimary(l, lang), l.col))
     .join("");
   const more = lines.length > 8 ? `<span class="chip">+${lines.length - 8}</span>` : "";
   const city = s.ct || prefName(s.p, lang);
@@ -57,10 +61,11 @@ export function lineDossierHtml(info: LineInfo, lang: Lang): string {
   const L = t(lang);
   const prefs = info.prefs.slice(0, 6).map((p) => prefName(p, lang)).join(" · ");
   const more = info.prefs.length > 6 ? ` +${info.prefs.length - 6}` : "";
+  const op = operatorName(info.line, lang) || "—";
   return `
     <div class="dossier">
-      <div class="chips">${lineChipHtml(info.line.n, info.line.col, "good")}</div>
-      <p class="dossier-meta">${esc(info.line.cn || "—")} · ${esc(regionIdName(info.region, lang))} · ${info.count}${esc(L.stationsUnit)}</p>
+      <div class="chips">${lineChipHtml(linePrimary(info.line, lang), info.line.col, "good")}</div>
+      <p class="dossier-meta">${esc(op)} · ${esc(regionIdName(info.region, lang))} · ${info.count}${esc(L.stationsUnit)}</p>
       <p class="dossier-meta">${esc(prefs)}${esc(more)}</p>
       ${info.line.sk ? `<p class="dossier-meta">${esc(L.shinkansen)}</p>` : ""}
     </div>`;

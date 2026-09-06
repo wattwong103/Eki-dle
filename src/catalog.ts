@@ -115,11 +115,15 @@ export class Catalog {
         blob: `${s.n}${s.o}${s.k}${s.r}${roma}${s.ct}`.toLowerCase(),
       };
     });
-    this.lineSearch = this.lines.map((info) => ({
-      info,
-      name: info.line.n.normalize("NFKC"),
-      blob: `${info.line.n}${info.line.cn}`.toLowerCase(),
-    }));
+    this.lineSearch = this.lines.map((info) => {
+      const l = info.line;
+      const roma = foldRomaji(l.r || "");
+      return {
+        info,
+        name: l.n.normalize("NFKC"),
+        blob: `${l.n}${l.r || ""}${roma}${l.cn}${l.ce || ""}`.toLowerCase(),
+      };
+    });
   }
 
   station(id: number): Station {
@@ -177,13 +181,21 @@ export class Catalog {
   searchLines(raw: string, limit = 8): LineInfo[] {
     const q = normalizeQuery(raw);
     if (q.length === 0) return [];
+    const qRoma = foldRomaji(q);
     const scored: { info: LineInfo; n: number }[] = [];
     for (const row of this.lineSearch) {
+      const l = row.info.line;
+      const nameEn = (l.r || "").toLowerCase();
+      const ce = (l.ce || "").toLowerCase();
+      const cn = (l.cn || "").toLowerCase();
+      const roma = foldRomaji(l.r || "");
       let n = 0;
-      if (row.name === q) n = 100;
-      else if (row.name.startsWith(q)) n = 80;
-      else if (row.name.includes(q)) n = 50;
-      else if (q.length >= 2 && row.blob.includes(q)) n = 20;
+      if (row.name === q || nameEn === q || roma === qRoma) n = 100;
+      else if (row.name.startsWith(q) || nameEn.startsWith(q) || (qRoma.length >= 2 && roma.startsWith(qRoma))) n = 80;
+      else if (ce === q || cn === q) n = 75;
+      else if (ce.startsWith(q) || cn.startsWith(q)) n = 65;
+      else if (row.name.includes(q) || nameEn.includes(q) || (qRoma.length >= 3 && roma.includes(qRoma))) n = 50;
+      else if (q.length >= 2 && (ce.includes(q) || cn.includes(q) || row.blob.includes(q))) n = 20;
       if (n) scored.push({ info: row.info, n });
     }
     scored.sort((a, b) => b.n - a.n || b.info.count - a.info.count);
@@ -248,4 +260,19 @@ export function foldRomaji(s: string): string {
     .replace(/uu/g, "u")
     .replace(/oo/g, "o")
     .replace(/['\-\s]/g, "");
+}
+
+
+/** Merge compact line-en.json {id:{r,ce}} into game lines missing English fields. */
+export function applyLineEnLabels(
+  data: GameData,
+  labels: Record<string, { r?: string; ce?: string }>,
+): GameData {
+  for (const line of data.lines) {
+    const en = labels[String(line.id)];
+    if (!en) continue;
+    if (!line.r && en.r) line.r = en.r;
+    if (!line.ce && en.ce) line.ce = en.ce;
+  }
+  return data;
 }

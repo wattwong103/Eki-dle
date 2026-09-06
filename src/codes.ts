@@ -1,5 +1,6 @@
 import type { Catalog } from "./catalog";
 import { regionName } from "./i18n";
+import { operatorName } from "./labels";
 import { prefName } from "./prefectures";
 import type { Lang, Station } from "./types";
 
@@ -25,7 +26,7 @@ function textHints(catalog: Catalog, target: Station, lang: Lang): string[] {
     ...new Set(
       catalog
         .linesFor(target)
-        .map((l) => l.cn?.trim())
+        .map((l) => operatorName(l, lang)?.trim())
         .filter((x): x is string => !!x),
     ),
   ];
