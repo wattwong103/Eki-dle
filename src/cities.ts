@@ -64,6 +64,21 @@ export const ALL_SCOPES: Scope[] = [
   "naha",
 ];
 
+export const REGION_SCOPES: Scope[] = [
+  "hokkaido",
+  "tohoku",
+  "kanto",
+  "chubu",
+  "kansai",
+  "chugoku",
+  "shikoku",
+  "kyushu",
+];
+
+export const CITY_SCOPES: Scope[] = METROS.map((m) => m.id as Scope);
+
+export const SPECIAL_SCOPES: Scope[] = ["shinkansen", "jr"];
+
 export function isScope(v: string | undefined): v is Scope {
   return !!v && (ALL_SCOPES as string[]).includes(v);
 }

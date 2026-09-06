@@ -1,5 +1,5 @@
 import { applyLineEnLabels, Catalog, type LineInfo } from "./catalog";
-import { ALL_SCOPES, METROS, cityStripHtml, metroName } from "./cities";
+import { CITY_SCOPES, METROS, REGION_SCOPES, SPECIAL_SCOPES, cityStripHtml, isScope, metroName } from "./cities";
 import { lineChipHtml, lineDossierHtml, stationDossierHtml } from "./dossier";
 import { linePrimary, operatorName, stationPrimary, stationSecondary } from "./labels";
 import {
@@ -149,44 +149,56 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
     document.documentElement.lang = settings.lang;
   }
 
+  function dailyScope(forMode: Mode = mode): Scope {
+    return usesAreaScope(forMode) ? settings.scope : "all";
+  }
+
+  function usesAreaScope(m: Mode): boolean {
+    return m === "eki" || m === "map" || m === "code" || m === "diagram" || m === "moji";
+  }
+
+  function dailySalt(modeKey: string): string {
+    return settings.scope === "all" ? modeKey : `${modeKey}:${settings.scope}`;
+  }
+
   function restoreEki(): EkiState {
     const dateKey = jstDateKey();
-    const saved = loadDaily<EkiState>("eki", dateKey);
+    const saved = loadDaily<EkiState>("eki", dateKey, settings.scope);
     if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
     return freshEki("daily");
   }
 
   function restoreMoji(): MojiState {
     const dateKey = jstDateKey();
-    const saved = loadDaily<MojiState>("moji", dateKey);
+    const saved = loadDaily<MojiState>("moji", dateKey, settings.scope);
     if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
     return freshMoji("daily");
   }
 
   function restoreRosen(): RosenState {
     const dateKey = jstDateKey();
-    const saved = loadDaily<RosenState>("rosen", dateKey);
+    const saved = loadDaily<RosenState>("rosen", dateKey, "all");
     if (saved && saved.targetIndex !== undefined && catalog.lines[saved.targetIndex]) return saved;
     return freshRosen("daily");
   }
 
   function restoreMap(): EkiState {
     const dateKey = jstDateKey();
-    const saved = loadDaily<EkiState>("map", dateKey);
+    const saved = loadDaily<EkiState>("map", dateKey, settings.scope);
     if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
     return freshMap("daily");
   }
 
   function restoreCode(): EkiState {
     const dateKey = jstDateKey();
-    const saved = loadDaily<EkiState>("code", dateKey);
+    const saved = loadDaily<EkiState>("code", dateKey, settings.scope);
     if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
     return freshCode("daily");
   }
 
   function restoreDiagram(): EkiState {
     const dateKey = jstDateKey();
-    const saved = loadDaily<EkiState>("diagram", dateKey);
+    const saved = loadDaily<EkiState>("diagram", dateKey, settings.scope);
     if (saved && saved.targetId && catalog.byId.has(saved.targetId)) return saved;
     return freshDiagram("daily");
   }
@@ -194,20 +206,20 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
   function freshEki(kind: PlayKind): EkiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
-    const pool = kind === "practice" ? catalog.puzzleIdsFor(settings.scope) : catalog.puzzleIds;
+    const pool = catalog.puzzleIdsFor(settings.scope);
     const ids = pool.length ? pool : catalog.puzzleIds;
     const targetId =
-      kind === "daily" ? pickId(ids, puzzleNo, "eki") : randomId(ids);
+      kind === "daily" ? pickId(ids, puzzleNo, dailySalt("eki")) : randomId(ids);
     return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
   }
 
   function freshMoji(kind: PlayKind): MojiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
+    const scoped = catalog.idsInScope(catalog.mojiIds, settings.scope);
+    const ids = scoped.length ? scoped : catalog.mojiIds;
     const targetId =
-      kind === "daily"
-        ? pickId(catalog.mojiIds, puzzleNo, "moji")
-        : randomId(catalog.mojiIds);
+      kind === "daily" ? pickId(ids, puzzleNo, dailySalt("moji")) : randomId(ids);
     return emptyMoji({ kind, puzzleNo, dateKey, targetId, length: MOJI_LEN });
   }
 
@@ -224,29 +236,33 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
   function freshMap(kind: PlayKind): EkiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
-    const pool = kind === "practice" ? catalog.puzzleIdsFor(settings.scope) : catalog.puzzleIds;
+    const pool = catalog.puzzleIdsFor(settings.scope);
     const ids = pool.length ? pool : catalog.puzzleIds;
     const targetId =
-      kind === "daily" ? pickId(ids, puzzleNo, "map") : randomId(ids);
+      kind === "daily" ? pickId(ids, puzzleNo, dailySalt("map")) : randomId(ids);
     return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
   }
 
   function freshCode(kind: PlayKind): EkiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
-    const ids = catalog.codeIds.length ? catalog.codeIds : catalog.puzzleIds;
+    const base = catalog.codeIds.length ? catalog.codeIds : catalog.puzzleIds;
+    const scoped = catalog.idsInScope(base, settings.scope);
+    const ids = scoped.length ? scoped : base;
     const targetId =
-      kind === "daily" ? pickId(ids, puzzleNo, "code") : randomId(ids);
+      kind === "daily" ? pickId(ids, puzzleNo, dailySalt("code")) : randomId(ids);
     return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
   }
 
   function freshDiagram(kind: PlayKind): EkiState {
     const dateKey = jstDateKey();
     const puzzleNo = puzzleNumber(dateKey);
-    const ids = crops.map((x) => x.id).filter((id) => catalog.byId.has(id));
-    const pool = ids.length ? ids : catalog.puzzleIds;
+    const cropIds = crops.map((x) => x.id).filter((id) => catalog.byId.has(id));
+    const scoped = catalog.idsInScope(cropIds, settings.scope);
+    const fallback = cropIds.length ? cropIds : catalog.puzzleIds;
+    const pool = scoped.length ? scoped : fallback;
     const targetId =
-      kind === "daily" ? pickId(pool, puzzleNo, "diagram") : randomId(pool);
+      kind === "daily" ? pickId(pool, puzzleNo, dailySalt("diagram")) : randomId(pool);
     return { kind, puzzleNo, dateKey, targetId, guesses: [], status: "playing" };
   }
 
@@ -289,7 +305,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
       </header>
       <div class="wrap">
         <p class="tagline" id="tagline"></p>
-        <div class="pills scopes" id="scope-pills" hidden></div>
+        <div class="scope-panel" id="scope-panel" hidden></div>
         <section id="eki-panel">
           <form class="search" id="guess-form" autocomplete="off">
             <input id="guess" name="guess" type="text" enterkeyhint="go" spellcheck="false" />
@@ -387,14 +403,27 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
     else if (act === "play-practice") setPlay("practice");
     else if (act?.startsWith("scope-")) {
       const next = act.slice(6) as Scope;
+      if (!isScope(next)) return;
       settings.scope = next;
       saveSettings(settings);
-      if (play === "practice" && (mode === "eki" || mode === "map")) {
-        if (mode === "eki") eki = freshEki("practice");
-        else mapMode = freshMap("practice");
+      if (usesAreaScope(mode)) {
+        if (play === "daily") {
+          if (mode === "eki") eki = restoreEki();
+          else if (mode === "moji") moji = restoreMoji();
+          else if (mode === "map") mapMode = restoreMap();
+          else if (mode === "code") code = restoreCode();
+          else if (mode === "diagram") diagram = restoreDiagram();
+        } else {
+          if (mode === "eki") eki = freshEki("practice");
+          else if (mode === "moji") moji = freshMoji("practice");
+          else if (mode === "map") mapMode = freshMap("practice");
+          else if (mode === "code") code = freshCode("practice");
+          else if (mode === "diagram") diagram = freshDiagram("practice");
+        }
         query = "";
         const input = document.getElementById("guess") as HTMLInputElement | null;
         if (input) input.value = "";
+        alertMsg = "";
       }
       paint();
     }
@@ -598,7 +627,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
       state.status = "lost";
     }
     finishIfNeeded(mode, state);
-    saveDaily(mode, state);
+    saveDaily(mode, state, dailyScope(mode));
     query = "";
     input.value = "";
     suggestions = [];
@@ -633,7 +662,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
     moji.current = [];
     syncKanaInput();
     finishIfNeeded("moji", moji);
-    saveDaily("moji", moji);
+    saveDaily("moji", moji, settings.scope);
     alertMsg = "";
     paint();
   }
@@ -663,7 +692,7 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
       rosen.status = "lost";
     }
     finishIfNeeded("rosen", rosen);
-    saveDaily("rosen", rosen);
+    saveDaily("rosen", rosen, "all");
     query = "";
     input.value = "";
     lineHits = [];
@@ -783,15 +812,23 @@ function start(root: HTMLElement, catalog: Catalog, rings: Rings, crops: Diagram
   }
 
   function paintScopes(): void {
-    const box = document.getElementById("scope-pills");
+    const box = document.getElementById("scope-panel");
     if (!box) return;
-    const show = play === "practice" && (mode === "eki" || mode === "map");
+    const show = usesAreaScope(mode);
     box.hidden = !show;
     if (!show) return;
-    box.innerHTML = ALL_SCOPES.map((id) => {
-      const label = scopeLabel(id);
-      return `<button class="pill" data-act="scope-${id}" aria-selected="${settings.scope === id}">${esc(label)}</button>`;
-    }).join("");
+    const L = i();
+    const chip = (id: Scope) => {
+      const selected = settings.scope === id;
+      return `<button type="button" class="pill" data-act="scope-${id}" aria-selected="${selected}">${esc(scopeLabel(id))}</button>`;
+    };
+    const row = (label: string, ids: Scope[]) =>
+      `<div class="scope-row"><span class="scope-label">${esc(label)}</span><div class="scope-chips">${ids.map(chip).join("")}</div></div>`;
+    box.innerHTML =
+      row(L.scopeAll, ["all"]) +
+      row(L.scopeRegions, REGION_SCOPES) +
+      row(L.scopeCities, CITY_SCOPES) +
+      row(L.scopeSpecial, SPECIAL_SCOPES);
   }
 
   function scopeLabel(id: Scope): string {

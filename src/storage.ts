@@ -1,5 +1,5 @@
 import { isScope } from "./cities";
-import type { EkiState, MojiState, Mode, RosenState, Settings, Stats } from "./types";
+import type { EkiState, MojiState, Mode, RosenState, Scope, Settings, Stats } from "./types";
 
 const PREFIX = "ekidle:v1:";
 
@@ -78,8 +78,9 @@ function consecutive(prev: string, next: string): boolean {
 export function loadDaily<T extends EkiState | MojiState | RosenState>(
   mode: Mode,
   dateKey: string,
+  scope: Scope = "all",
 ): T | null {
-  const raw = read(`${PREFIX}daily:${mode}:${dateKey}`);
+  const raw = read(`${PREFIX}daily:${mode}:${scope}:${dateKey}`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as T;
@@ -91,9 +92,10 @@ export function loadDaily<T extends EkiState | MojiState | RosenState>(
 export function saveDaily(
   mode: Mode,
   state: EkiState | MojiState | RosenState,
+  scope: Scope = "all",
 ): void {
   if (state.kind !== "daily") return;
-  localStorage.setItem(`${PREFIX}daily:${mode}:${state.dateKey}`, JSON.stringify(state));
+  localStorage.setItem(`${PREFIX}daily:${mode}:${scope}:${state.dateKey}`, JSON.stringify(state));
 }
 
 function read(key: string): string | null {

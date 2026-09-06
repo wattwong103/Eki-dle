@@ -162,6 +162,28 @@ export class Catalog {
     return this.stationsOnLine(index).sort((a, b) => orderOf(a) - orderOf(b));
   }
 
+  stationInScope(s: Station, scope: Scope): boolean {
+    if (scope === "all") return true;
+    const metro = METROS.find((m) => m.id === scope);
+    if (metro) return stationInMetro(s, metro);
+    if (scope === "shinkansen") return (s.f & FLAG_SHINKANSEN) !== 0;
+    if (scope === "jr") return s.co.some((c) => JR_COS.has(c));
+    return stationInRegionScope(s, scope);
+  }
+
+  stationIdsFor(scope: Scope): number[] {
+    if (scope === "all") return this.data.stations.map((s) => s.id);
+    return this.data.stations.filter((s) => this.stationInScope(s, scope)).map((s) => s.id);
+  }
+
+  idsInScope(ids: number[], scope: Scope): number[] {
+    if (scope === "all") return ids;
+    return ids.filter((id) => {
+      const s = this.byId.get(id);
+      return !!s && this.stationInScope(s, scope);
+    });
+  }
+
   puzzleIdsFor(scope: Scope): number[] {
     if (scope === "all") return this.puzzleIds;
     const metro = METROS.find((m) => m.id === scope);
@@ -169,13 +191,7 @@ export class Catalog {
       const ids = this.data.stations.filter((s) => stationInMetro(s, metro)).map((s) => s.id);
       return ids.length ? ids : this.puzzleIds;
     }
-    return this.puzzleIds.filter((id) => {
-      const s = this.byId.get(id);
-      if (!s) return false;
-      if (scope === "shinkansen") return (s.f & FLAG_SHINKANSEN) !== 0;
-      if (scope === "jr") return s.co.some((c) => JR_COS.has(c));
-      return stationInRegionScope(s, scope);
-    });
+    return this.idsInScope(this.puzzleIds, scope);
   }
 
   searchLines(raw: string, limit = 8): LineInfo[] {
