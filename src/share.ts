@@ -22,52 +22,57 @@ function lineEmoji(g: EkiState["guesses"][number]): string {
   return k === "correct" ? "🟩" : k === "present" ? "🟨" : "⬛";
 }
 
-export function shareEki(state: EkiState, lang: Lang): string {
-  return shareStationLike(state, lang, lang === "ja" ? "駅dle" : "Eki-dle");
+function shareHead(title: string, state: { kind: string; puzzleNo: number; status: string; }, n: number, lang: Lang, scope = ""): string {
+  const area = scope ? ` · ${scope}` : "";
+  const num = state.kind === "daily" ? `#${state.puzzleNo}` : lang === "ja" ? "練習" : "practice";
+  const score = state.status === "won" ? `${n}/6` : "X/6";
+  return `${title}${area} ${num} ${score}`;
 }
 
-function shareStationLike(state: EkiState, lang: Lang, title: string): string {
+export function shareEki(state: EkiState, lang: Lang, scope = ""): string {
+  return shareStationLike(state, lang, lang === "ja" ? "駅dle" : "Eki-dle", scope, true);
+}
+
+function shareStationLike(
+  state: EkiState,
+  lang: Lang,
+  title: string,
+  scope: string,
+  withKm: boolean,
+): string {
   const n = state.guesses.length;
-  const head =
-    lang === "ja"
-      ? `${title} ${state.kind === "daily" ? `#${state.puzzleNo}` : "練習"} ${state.status === "won" ? `${n}/6` : "X/6"}`
-      : `${title} ${state.kind === "daily" ? `#${state.puzzleNo}` : "practice"} ${state.status === "won" ? `${n}/6` : "X/6"}`;
+  const head = shareHead(title, state, n, lang, scope);
   const rows = state.guesses.map((g) => {
     if (g.id === state.targetId) return `${prefEmoji("same")}${lineEmoji(g)} 🎉`;
+    if (!withKm) return `${prefEmoji(g.pref)}${lineEmoji(g)}`;
     const arrow = COMPASS_EMOJI[g.compass as Compass8] ?? "➡️";
     return `${prefEmoji(g.pref)}${lineEmoji(g)} ${Math.round(g.km)}km ${arrow}`;
   });
   return [head, ...rows, SITE].join("\n");
 }
 
-export function shareMap(state: EkiState, lang: Lang): string {
-  return shareStationLike(state, lang, lang === "ja" ? "駅dle 地図" : "Eki-dle Map");
+export function shareMap(state: EkiState, lang: Lang, scope = ""): string {
+  return shareStationLike(state, lang, lang === "ja" ? "駅dle 地図" : "Eki-dle Map", scope, false);
 }
 
-export function shareCode(state: EkiState, lang: Lang): string {
-  return shareStationLike(state, lang, lang === "ja" ? "駅dle コード" : "Eki-dle Code");
+export function shareCode(state: EkiState, lang: Lang, scope = ""): string {
+  return shareStationLike(state, lang, lang === "ja" ? "駅dle コード" : "Eki-dle Code", scope, false);
 }
 
-export function shareDiagram(state: EkiState, lang: Lang): string {
-  return shareStationLike(state, lang, lang === "ja" ? "駅dle 路線図" : "Eki-dle Diagram");
+export function shareDiagram(state: EkiState, lang: Lang, scope = ""): string {
+  return shareStationLike(state, lang, lang === "ja" ? "駅dle 路線図" : "Eki-dle Diagram", scope, false);
 }
 
-export function shareMoji(state: MojiState, lang: Lang): string {
+export function shareMoji(state: MojiState, lang: Lang, scope = ""): string {
   const n = state.rows.length;
-  const head =
-    lang === "ja"
-      ? `駅dle 文字 ${state.kind === "daily" ? `#${state.puzzleNo}` : "練習"} ${state.status === "won" ? `${n}/6` : "X/6"}`
-      : `Eki-dle Kana ${state.kind === "daily" ? `#${state.puzzleNo}` : "practice"} ${state.status === "won" ? `${n}/6` : "X/6"}`;
+  const head = shareHead(lang === "ja" ? "駅dle 文字" : "Eki-dle Kana", state, n, lang, scope);
   const rows = state.rows.map((row) => row.map((k) => TILE[k]).join(""));
   return [head, ...rows, SITE].join("\n");
 }
 
-export function shareRosen(state: RosenState, lang: Lang): string {
+export function shareRosen(state: RosenState, lang: Lang, scope = ""): string {
   const n = state.guesses.length;
-  const head =
-    lang === "ja"
-      ? `駅dle 路線 ${state.kind === "daily" ? `#${state.puzzleNo}` : "練習"} ${state.status === "won" ? `${n}/6` : "X/6"}`
-      : `Eki-dle Line ${state.kind === "daily" ? `#${state.puzzleNo}` : "practice"} ${state.status === "won" ? `${n}/6` : "X/6"}`;
+  const head = shareHead(lang === "ja" ? "駅dle 路線" : "Eki-dle Line", state, n, lang, scope);
   const rows = state.guesses.map((g) => {
     if (g.index === state.targetIndex) return `🟩🟩🟩 🎉`;
     const co = g.sameCompany ? "🟩" : "⬛";

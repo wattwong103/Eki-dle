@@ -85,13 +85,28 @@ export type Scope =
   | "kobe"
   | "hiroshima"
   | "fukuoka"
-  | "naha";
+  | "naha"
+  | "kawasaki"
+  | "chiba"
+  | "kitakyushu"
+  | "kumamoto"
+  | "okayama"
+  | "toyama"
+  | "kagoshima"
+  | "jreast"
+  | "tokyometro"
+  | "tokyu"
+  | "hankyu"
+  | "kintetsu"
+  | "meitetsu";
 
 export interface Settings {
   lang: Lang;
   theme: Theme;
   colorblind: boolean;
   scope: Scope;
+  /** Practice-only Kana length. Daily is always 5. */
+  kanaLen: 4 | 5;
 }
 
 export interface EkiGuess {

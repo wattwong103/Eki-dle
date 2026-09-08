@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Catalog } from "./catalog";
-import { visibleCodes } from "./codes";
+import { resolveCodePool, visibleCodes } from "./codes";
 import type { GameData, Line, Station } from "./types";
 
 function line(partial: Partial<Line> & Pick<Line, "id" | "n">): Line {
@@ -69,25 +69,43 @@ describe("visibleCodes", () => {
     ]);
   });
 
-  it("fills with target text hints (pref→region→operator→year), never other stations' codes", () => {
+  it("after own codes, reveals operator + color — not prefecture, region, or year", () => {
     const shown = visibleCodes(catalog, target, 5, "en");
     expect(shown.map((x) => (x.kind === "code" ? x.code : x.label))).toEqual([
       "T01",
       "T02",
-      "Tokyo",
-      "Kanto",
       "Metro",
-      "1990",
     ]);
-    expect(shown.every((x) => x.kind === "code" || x.kind === "hint")).toBe(true);
+    expect(shown[2]).toEqual({ kind: "hint", label: "Metro", color: "#e11" });
+    expect(shown.some((x) => x.kind === "hint" && ["Tokyo", "Kanto", "1990"].includes(x.label))).toBe(
+      false,
+    );
     expect(shown.some((x) => x.kind === "code" && ["P11", "R21", "O31", "Y41"].includes(x.code))).toBe(
       false,
     );
   });
 
-  it("uses Japanese labels when lang is ja", () => {
-    const shown = visibleCodes(catalog, target, 3, "ja");
-    expect(shown[2]).toEqual({ kind: "hint", label: "東京都" });
-    expect(shown[3]).toEqual({ kind: "hint", label: "関東" });
+  it("uses Japanese operator names when lang is ja", () => {
+    const shown = visibleCodes(catalog, target, 2, "ja");
+    expect(shown[2]).toEqual({ kind: "hint", label: "Metro", color: "#e11" });
+  });
+});
+
+describe("resolveCodePool", () => {
+  it("keeps a large scoped pool", () => {
+    const ids = Array.from({ length: 20 }, (_, i) => i + 1);
+    expect(resolveCodePool(ids, [99], "daily")).toEqual({ ids, widened: false });
+  });
+
+  it("empties a tiny daily pool instead of falling back", () => {
+    expect(resolveCodePool([1, 2], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "daily")).toEqual({
+      ids: [],
+      widened: false,
+    });
+  });
+
+  it("widens a tiny practice pool to nationwide", () => {
+    const all = Array.from({ length: 12 }, (_, i) => i + 1);
+    expect(resolveCodePool([1], all, "practice")).toEqual({ ids: all, widened: true });
   });
 });

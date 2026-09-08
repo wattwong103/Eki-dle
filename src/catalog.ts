@@ -1,4 +1,10 @@
-import { METROS, stationInMetro, stationInRegionScope } from "./cities";
+import {
+  LINE_CITY_MIN_STOPS,
+  METROS,
+  operatorCo,
+  stationInMetro,
+  stationInRegionScope,
+} from "./cities";
 import { regionOf, type RegionId } from "./prefectures";
 import {
   FLAG_PUZZLE,
@@ -16,6 +22,8 @@ export type LineInfo = {
   count: number;
   prefs: number[];
   region: RegionId;
+  /** Stops in each METROS city, same order as METROS. */
+  metroStops: number[];
 };
 
 const EXTRA_PUZZLE_NAMES = new Set([
@@ -37,6 +45,15 @@ const EXTRA_PUZZLE_NAMES = new Set([
   "下北沢",
   "吉祥寺",
   "中目黒",
+  "箱根湯本",
+  "嵐山",
+  "出雲大社前",
+  "函館",
+  "江ノ島",
+  "由布院",
+  "高山",
+  "飛騨古川",
+  "別府(大分)",
 ]);
 
 const JR_COS = new Set([1, 2, 3, 4, 5, 6]);
@@ -46,8 +63,11 @@ export class Catalog {
   readonly byId = new Map<number, Station>();
   readonly puzzleIds: number[];
   readonly codeIds: number[];
+  readonly diagramIds: number[];
   readonly mojiIds: number[];
+  readonly mojiIds4: number[];
   readonly mojiKana = new Set<string>();
+  readonly mojiKana4 = new Set<string>();
   readonly lines: LineInfo[];
   readonly rosenIds: number[];
   private readonly searchIndex: { s: Station; blob: string; name: string; kana: string; roma: string }[];
@@ -59,11 +79,15 @@ export class Catalog {
 
     const counts = data.lines.map(() => 0);
     const prefSets = data.lines.map(() => new Set<number>());
+    const metroStops = data.lines.map(() => METROS.map(() => 0));
     for (const s of data.stations) {
       for (const idx of s.l) {
         if (counts[idx] === undefined) continue;
         counts[idx]! += 1;
         prefSets[idx]!.add(s.p);
+        for (let mi = 0; mi < METROS.length; mi++) {
+          if (stationInMetro(s, METROS[mi]!)) metroStops[idx]![mi]! += 1;
+        }
       }
     }
     this.lines = data.lines.map((line, index) => {
@@ -81,7 +105,14 @@ export class Catalog {
           region = r;
         }
       }
-      return { index, line, count: counts[index] ?? 0, prefs, region };
+      return {
+        index,
+        line,
+        count: counts[index] ?? 0,
+        prefs,
+        region,
+        metroStops: metroStops[index] ?? METROS.map(() => 0),
+      };
     });
     this.rosenIds = this.lines
       .filter((l) => l.count >= 6 && (l.count >= 10 || l.line.sk || (l.line.co > 0 && l.line.co <= 26)))
@@ -97,13 +128,23 @@ export class Catalog {
     this.codeIds = data.stations
       .filter((s) => codesForStation(s).length >= 1)
       .map((s) => s.id);
+    this.diagramIds = data.stations
+      .filter((s) => s.l.length >= 2 || (s.f & FLAG_PUZZLE) !== 0)
+      .map((s) => s.id);
 
     this.mojiIds = data.stations
       .filter((s) => kanaChars(s.k).length === MOJI_LEN)
       .map((s) => s.id);
+    this.mojiIds4 = data.stations
+      .filter((s) => kanaChars(s.k).length === 4)
+      .map((s) => s.id);
     for (const id of this.mojiIds) {
       const s = this.byId.get(id);
       if (s) this.mojiKana.add(kanaChars(s.k).join(""));
+    }
+    for (const id of this.mojiIds4) {
+      const s = this.byId.get(id);
+      if (s) this.mojiKana4.add(kanaChars(s.k).join(""));
     }
     this.searchIndex = data.stations.map((s) => {
       const roma = foldRomaji(s.r);
@@ -168,6 +209,8 @@ export class Catalog {
     if (metro) return stationInMetro(s, metro);
     if (scope === "shinkansen") return (s.f & FLAG_SHINKANSEN) !== 0;
     if (scope === "jr") return s.co.some((c) => JR_COS.has(c));
+    const op = operatorCo(scope);
+    if (op !== undefined) return s.co.includes(op);
     return stationInRegionScope(s, scope);
   }
 
@@ -186,15 +229,45 @@ export class Catalog {
 
   puzzleIdsFor(scope: Scope): number[] {
     if (scope === "all") return this.puzzleIds;
-    const metro = METROS.find((m) => m.id === scope);
-    if (metro) {
-      const ids = this.data.stations.filter((s) => stationInMetro(s, metro)).map((s) => s.id);
-      return ids.length ? ids : this.puzzleIds;
-    }
     return this.idsInScope(this.puzzleIds, scope);
   }
 
-  searchLines(raw: string, limit = 8): LineInfo[] {
+  /** City practice uses every station in the city; regions stay on the transfer pool. */
+  practiceIdsFor(scope: Scope): number[] {
+    if (scope === "all") return this.puzzleIds;
+    const metro = METROS.find((m) => m.id === scope);
+    if (metro) return this.stationIdsFor(scope);
+    return this.puzzleIdsFor(scope);
+  }
+
+  lineInScope(info: LineInfo, scope: Scope): boolean {
+    if (scope === "all") return true;
+    if (scope === "shinkansen") return info.line.sk === 1;
+    if (scope === "jr") return JR_COS.has(info.line.co);
+    const op = operatorCo(scope);
+    if (op !== undefined) return info.line.co === op;
+    const mi = METROS.findIndex((m) => m.id === scope);
+    if (mi >= 0) return (info.metroStops[mi] ?? 0) >= LINE_CITY_MIN_STOPS;
+    return info.region === scope;
+  }
+
+  rosenIdsFor(scope: Scope): number[] {
+    if (scope === "all") return this.rosenIds;
+    return this.rosenIds.filter((idx) => {
+      const info = this.lines[idx];
+      return !!info && this.lineInScope(info, scope);
+    });
+  }
+
+  /** Numbered transfers nationwide/region; numbered stations of any kind in a city. */
+  codeIdsFor(scope: Scope): number[] {
+    const numbered = this.idsInScope(this.codeIds, scope);
+    if (METROS.some((m) => m.id === scope)) return numbered;
+    const puzzle = new Set(this.puzzleIds);
+    return numbered.filter((id) => puzzle.has(id));
+  }
+
+  searchLines(raw: string, limit = 8, scope: Scope = "all"): LineInfo[] {
     const q = normalizeQuery(raw);
     if (q.length === 0) return [];
     const qRoma = foldRomaji(q);
@@ -212,13 +285,16 @@ export class Catalog {
       else if (ce.startsWith(q) || cn.startsWith(q)) n = 65;
       else if (row.name.includes(q) || nameEn.includes(q) || (qRoma.length >= 3 && roma.includes(qRoma))) n = 50;
       else if (q.length >= 2 && (ce.includes(q) || cn.includes(q) || row.blob.includes(q))) n = 20;
-      if (n) scored.push({ info: row.info, n });
+      if (n) {
+        if (scope !== "all" && this.lineInScope(row.info, scope)) n += 10;
+        scored.push({ info: row.info, n });
+      }
     }
     scored.sort((a, b) => b.n - a.n || b.info.count - a.info.count);
     return scored.slice(0, limit).map((x) => x.info);
   }
 
-  search(raw: string, limit = 8): Station[] {
+  search(raw: string, limit = 8, scope: Scope = "all"): Station[] {
     const q = normalizeQuery(raw);
     if (q.length === 0) return [];
     const qKana = toHiragana(q);
@@ -232,7 +308,10 @@ export class Catalog {
       else if (row.name.includes(q) || row.kana.includes(qKana)) n = 40;
       else if (qRoma.length >= 3 && row.roma.includes(qRoma)) n = 30;
       else if (q.length >= 2 && row.blob.includes(q)) n = 10;
-      if (n) scored.push({ s: row.s, n });
+      if (n) {
+        if (scope !== "all" && this.stationInScope(row.s, scope)) n += 10;
+        scored.push({ s: row.s, n });
+      }
     }
     scored.sort((a, b) => b.n - a.n || b.s.l.length - a.s.l.length);
     const seen = new Set<number>();
@@ -247,7 +326,9 @@ export class Catalog {
   }
 
   isMojiWord(kana: string): boolean {
-    return this.mojiKana.has(kanaChars(kana).join(""));
+    const word = kanaChars(kana).join("");
+    if (word.length === 4) return this.mojiKana4.has(word);
+    return this.mojiKana.has(word);
   }
 }
 

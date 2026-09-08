@@ -1,16 +1,21 @@
 import { isScope } from "./cities";
-import type { EkiState, MojiState, Mode, RosenState, Scope, Settings, Stats } from "./types";
+import type { EkiState, Lang, MojiState, Mode, RosenState, Scope, Settings, Stats } from "./types";
 
 const PREFIX = "ekidle:v1:";
+
+export function defaultLang(language = typeof navigator !== "undefined" ? navigator.language : "en"): Lang {
+  return language.toLowerCase().startsWith("ja") ? "ja" : "en";
+}
 
 export function loadSettings(): Settings {
   const raw = read(`${PREFIX}settings`);
   const s = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
   return {
-    lang: s.lang === "ja" ? "ja" : "en",
+    lang: s.lang === "ja" || s.lang === "en" ? s.lang : defaultLang(),
     theme: s.theme === "day" ? "day" : "night",
     colorblind: !!s.colorblind,
     scope: isScope(s.scope) ? s.scope : "all",
+    kanaLen: s.kanaLen === 4 ? 4 : 5,
   };
 }
 

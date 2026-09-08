@@ -1,5 +1,5 @@
 import type { Catalog } from "./catalog";
-import { METROS } from "./cities";
+import { MAP_LABEL_IDS, METROS } from "./cities";
 import type { EkiGuess, Lang, Station } from "./types";
 
 export type JapanRings = number[][][][];
@@ -69,7 +69,7 @@ export function drawJapanMap(
   ctx.fillStyle = label;
   ctx.font = "600 9px ui-sans-serif, 'IBM Plex Sans JP', sans-serif";
   ctx.textBaseline = "bottom";
-  const labels = METROS.filter((m) => !["yokohama", "kyoto", "kobe"].includes(m.id));
+  const labels = METROS.filter((m) => MAP_LABEL_IDS.includes(m.id));
   for (const city of labels) {
     const [x, y] = project(city.lng, city.lat, w, h);
     ctx.beginPath();

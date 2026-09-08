@@ -24,6 +24,6 @@ export function linePrimary(line: Line, lang: Lang): string {
 
 /** Operator / company name for the given UI language. */
 export function operatorName(line: Line, lang: Lang): string {
-  if (lang === "en") return line.ce || line.cn || "";
-  return line.cn || "";
+  if (lang === "en") return line.ce || line.cn || "Independent";
+  return line.cn || "その他";
 }

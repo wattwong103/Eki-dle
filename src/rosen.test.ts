@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Catalog } from "./catalog";
 import { evaluateRosen } from "./rosen";
 import type { GameData, Line, Station } from "./types";
+import game from "../public/data/game.json";
 
 function line(partial: Partial<Line> & Pick<Line, "id" | "n">): Line {
   return { r: "", ce: "", co: 2, cn: "JR東日本", col: "#9ACD32", sk: 0, ...partial };
@@ -32,10 +33,10 @@ const data: GameData = {
     line({ id: 2, n: "東海道新幹線", co: 3, cn: "JR東海", col: "#0000FF", sk: 1 }),
   ],
   stations: [
-    st({ id: 1, n: "東京", p: 13, lat: 35.68, lng: 139.76, l: [0, 1], f: 3 }),
-    st({ id: 2, n: "新宿", p: 13, lat: 35.69, lng: 139.7, l: [0] }),
-    st({ id: 3, n: "品川", p: 13, lat: 35.62, lng: 139.73, l: [0, 1], f: 3 }),
-    st({ id: 4, n: "名古屋", p: 23, lat: 35.17, lng: 136.88, l: [1], f: 3 }),
+    st({ id: 1, n: "東京", p: 13, ct: "千代田区", lat: 35.68, lng: 139.76, l: [0, 1], f: 3 }),
+    st({ id: 2, n: "新宿", p: 13, ct: "新宿区", lat: 35.69, lng: 139.7, l: [0] }),
+    st({ id: 3, n: "品川", p: 13, ct: "港区", lat: 35.62, lng: 139.73, l: [0, 1], f: 3 }),
+    st({ id: 4, n: "名古屋", p: 23, ct: "名古屋市", lat: 35.17, lng: 136.88, l: [1], f: 3 }),
   ],
 };
 
@@ -52,6 +53,27 @@ describe("Catalog line extras", () => {
 
   it("finds a line by substring", () => {
     expect(cat.searchLines("山手")[0]?.line.n).toBe("JR山手線");
+  });
+
+  it("scopes lines by region, operator, and city stop count", () => {
+    expect(cat.lineInScope(cat.lineInfo(0), "kanto")).toBe(true);
+    expect(cat.lineInScope(cat.lineInfo(0), "kansai")).toBe(false);
+    expect(cat.lineInScope(cat.lineInfo(0), "jreast")).toBe(true);
+    expect(cat.lineInScope(cat.lineInfo(1), "jreast")).toBe(false);
+    expect(cat.lineInScope(cat.lineInfo(0), "tokyo")).toBe(true);
+    expect(cat.lineInScope(cat.lineInfo(1), "tokyo")).toBe(false);
+    expect(cat.lineInScope(cat.lineInfo(1), "nagoya")).toBe(false);
+  });
+});
+
+describe("rosenIdsFor on full catalog", () => {
+  const cat = new Catalog(game as unknown as GameData);
+
+  it("keeps a large all-Japan pool and non-empty Kansai / Tokyo Metro", () => {
+    expect(cat.rosenIdsFor("all").length).toBeGreaterThan(100);
+    expect(cat.rosenIdsFor("kansai").length).toBeGreaterThan(10);
+    expect(cat.rosenIdsFor("tokyometro").length).toBeGreaterThan(0);
+    expect(cat.rosenIdsFor("tokyometro").every((i) => cat.lineInfo(i).line.co === 18)).toBe(true);
   });
 });
 

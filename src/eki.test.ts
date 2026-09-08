@@ -116,4 +116,10 @@ describe("Catalog.search", () => {
     expect(cat.puzzleIdsFor("kanto").length).toBeGreaterThan(0);
     expect(cat.puzzleIdsFor("kansai")).toEqual([]);
   });
+
+  it("keeps an exact nationwide hit first, then prefers in-scope prefixes", () => {
+    expect(cat.search("さっぽろ", 1, "kanto")[0]?.n).toBe("札幌");
+    const shin = cat.search("しん", 8, "kanto").map((s) => s.n);
+    expect(shin[0]).toBe("新宿");
+  });
 });

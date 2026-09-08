@@ -46,9 +46,9 @@ export function tileUrl(x: number, y: number, z = TILE_ZOOM): string {
   return `https://${sub}.basemaps.cartocdn.com/light_nolabels/${z}/${x}/${y}.png`;
 }
 
-export async function drawMapView(canvas: HTMLCanvasElement, station: Station): Promise<void> {
+export async function drawMapView(canvas: HTMLCanvasElement, station: Station): Promise<boolean> {
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return false;
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
@@ -68,8 +68,9 @@ export async function drawMapView(canvas: HTMLCanvasElement, station: Station): 
   stitch.width = TILE_SIZE * 3;
   stitch.height = TILE_SIZE * 3;
   const sctx = stitch.getContext("2d");
-  if (!sctx) return;
+  if (!sctx) return false;
 
+  let loaded = 0;
   await Promise.all(
     tiles3x3(centerTile).map(async (tile) => {
       const img = new Image();
@@ -77,6 +78,7 @@ export async function drawMapView(canvas: HTMLCanvasElement, station: Station): 
       await new Promise<void>((resolve) => {
         img.onload = () => {
           sctx.drawImage(img, (tile.x - (centerTile.x - 1)) * TILE_SIZE, (tile.y - (centerTile.y - 1)) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          loaded += 1;
           resolve();
         };
         img.onerror = () => resolve();
@@ -93,7 +95,12 @@ export async function drawMapView(canvas: HTMLCanvasElement, station: Station): 
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.closePath();
   ctx.clip();
-  ctx.drawImage(stitch, cx - markerX, cy - markerY);
+  if (loaded === 0) {
+    ctx.fillStyle = "#cfd6dc";
+    ctx.fill();
+  } else {
+    ctx.drawImage(stitch, cx - markerX, cy - markerY);
+  }
   ctx.restore();
 
   ctx.beginPath();
@@ -115,6 +122,8 @@ export async function drawMapView(canvas: HTMLCanvasElement, station: Station): 
   ctx.arc(cx, cy + 2, 4, 0, Math.PI * 2);
   ctx.fillStyle = "#fff";
   ctx.fill();
+
+  return loaded > 0;
 }
 
 export const MAP_ATTRIBUTION = "© OpenStreetMap © CARTO";

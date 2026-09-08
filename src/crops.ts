@@ -59,57 +59,111 @@ function safeColor(col: string | undefined): string {
   return /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : "#334455";
 }
 
-/** Spoiler-safe spider/route diagram from catalog geometry (no station name/kana/romaji). */
+const SCHEMATIC_W = 960;
+const SCHEMATIC_H = 540;
+const SCHEMATIC_PAD = 64;
+const SCHEMATIC_NEIGHBORS = 2;
+const SCHEMATIC_MAX_LINES = 8;
+const SCHEMATIC_MIN_SPAN = 0.002;
+
+function relativeXY(s: Station, origin: Station): [number, number] {
+  const cos = Math.cos((origin.lat * Math.PI) / 180);
+  const x = (s.lng - origin.lng) * cos;
+  const y = origin.lat - s.lat;
+  return [x, y];
+}
+
+function project(
+  s: Station,
+  origin: Station,
+  scale: number,
+  w = SCHEMATIC_W,
+  h = SCHEMATIC_H,
+): [number, number] {
+  const [x, y] = relativeXY(s, origin);
+  return [w / 2 + x * scale, h / 2 + y * scale];
+}
+
+/** Neighbor slices (±2) per line through the target, for the geo schematic. */
+export function schematicSequences(
+  catalog: Catalog,
+  station: Station,
+  neighbors = SCHEMATIC_NEIGHBORS,
+  maxLines = SCHEMATIC_MAX_LINES,
+): { color: string; stations: Station[] }[] {
+  const out: { color: string; stations: Station[] }[] = [];
+  for (const li of station.l.slice(0, maxLines)) {
+    const sorted = catalog.stationsOnLineSorted(li);
+    const idx = sorted.findIndex((s) => s.id === station.id);
+    if (idx < 0) continue;
+    const from = Math.max(0, idx - neighbors);
+    const to = Math.min(sorted.length, idx + neighbors + 1);
+    const slice = sorted.slice(from, to);
+    if (!slice.length) continue;
+    const line = catalog.line(li);
+    out.push({ color: safeColor(line?.col), stations: slice });
+  }
+  return out;
+}
+
+/** Spoiler-safe geographic schematic: real neighbor lat/lng, no names. Target pinned at center. */
 export function spiderDiagramSvg(catalog: Catalog, station: Station): string {
-  const W = 960;
-  const H = 540;
-  const cx = W / 2;
-  const cy = H / 2;
-  const lineIdxs = station.l.slice(0, 8);
-  const n = Math.max(lineIdxs.length, 1);
+  const W = SCHEMATIC_W;
+  const H = SCHEMATIC_H;
+  const sequences = schematicSequences(catalog, station);
+  const seen = new Map<number, Station>();
+  seen.set(station.id, station);
+  for (const seq of sequences) {
+    for (const s of seq.stations) seen.set(s.id, s);
+  }
+
+  let maxR = 0;
+  for (const s of seen.values()) {
+    const [x, y] = relativeXY(s, station);
+    maxR = Math.max(maxR, Math.hypot(x, y));
+  }
+  const budget = Math.min(W, H) / 2 - SCHEMATIC_PAD;
+  const scale = budget / Math.max(maxR, SCHEMATIC_MIN_SPAN);
+
   const parts: string[] = [];
   parts.push(`<rect width='${W}' height='${H}' fill='#f3efe6'/>`);
   parts.push(
     `<rect x='24' y='24' width='${W - 48}' height='${H - 48}' rx='18' fill='#fff' stroke='#ddd' stroke-width='2'/>`,
   );
 
-  lineIdxs.forEach((li, i) => {
-    const line = catalog.line(li);
-    const color = escapeXml(safeColor(line?.col));
-    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-    const sorted = catalog.stationsOnLineSorted(li);
-    const idx = sorted.findIndex((s) => s.id === station.id);
-    const before = idx >= 0 ? Math.min(idx, 4) : 3;
-    const after = idx >= 0 ? Math.min(Math.max(sorted.length - 1 - idx, 0), 4) : 3;
-    const len = 210;
-    const scale = Math.max(Math.max(before, after), 1);
-    const x1 = cx - Math.cos(angle) * len * (before / scale);
-    const y1 = cy - Math.sin(angle) * len * (before / scale);
-    const x2 = cx + Math.cos(angle) * len;
-    const y2 = cy + Math.sin(angle) * len;
+  for (const seq of sequences) {
+    if (seq.stations.length < 2) continue;
+    const color = escapeXml(seq.color);
+    const pts = seq.stations
+      .map((s) => {
+        const [x, y] = project(s, station, scale);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
     parts.push(
-      `<line x1='${x1.toFixed(1)}' y1='${y1.toFixed(1)}' x2='${x2.toFixed(1)}' y2='${y2.toFixed(1)}' stroke='${color}' stroke-width='12' stroke-linecap='round'/>`,
+      `<polyline points='${pts}' fill='none' stroke='${color}' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/>`,
     );
-    for (let k = -before; k <= after; k++) {
-      if (k === 0) continue;
-      const t = Math.min(Math.abs(k) / scale, 1) * Math.sign(k);
-      const x = cx + Math.cos(angle) * len * t;
-      const y = cy + Math.sin(angle) * len * t;
+  }
+
+  for (const seq of sequences) {
+    const color = escapeXml(seq.color);
+    for (const s of seq.stations) {
+      if (s.id === station.id) continue;
+      const [x, y] = project(s, station, scale);
       parts.push(
-        `<circle cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' r='9' fill='#fff' stroke='${color}' stroke-width='3'/>`,
+        `<circle cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' r='8' fill='#fff' stroke='${color}' stroke-width='3'/>`,
       );
     }
-  });
+  }
 
+  const cx = W / 2;
+  const cy = H / 2;
   parts.push(`<circle cx='${cx}' cy='${cy}' r='16' fill='#fff' stroke='#222' stroke-width='5'/>`);
   parts.push(
     `<rect x='${cx - 78}' y='${cy - 22}' width='156' height='44' rx='10' fill='#1a1f24' opacity='0.92'/>`,
   );
   parts.push(
     `<text x='${cx}' y='${cy + 7}' text-anchor='middle' font-family='sans-serif' font-size='20' font-weight='700' fill='#f3efe6'>???</text>`,
-  );
-  parts.push(
-    `<text x='${cx}' y='${H - 40}' text-anchor='middle' font-family='sans-serif' font-size='14' fill='#888'>${n} lines</text>`,
   );
 
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}' viewBox='0 0 ${W} ${H}'>${parts.join("")}</svg>`;
